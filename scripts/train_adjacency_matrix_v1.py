@@ -596,13 +596,23 @@ class Trainer:
                 self.best_epoch = epoch
                 self.patience_counter = 0
                 
+                # Convert numpy values to Python types for JSON serialization
+                val_metrics_serializable = {}
+                for key, value in val_metrics.items():
+                    if isinstance(value, np.ndarray):
+                        val_metrics_serializable[key] = float(value)
+                    elif isinstance(value, (np.integer, np.floating)):
+                        val_metrics_serializable[key] = float(value)
+                    else:
+                        val_metrics_serializable[key] = value
+                
                 # Save best model
                 torch.save({
-                    'epoch': epoch,
+                    'epoch': int(epoch),
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
-                    'val_loss': val_loss,
-                    'val_metrics': val_metrics,
+                    'val_loss': float(val_loss),
+                    'val_metrics': val_metrics_serializable,
                 }, self.config.MODEL_SAVE_PATH)
                 print(f"✓ Saved best model (val_loss: {val_loss:.4f})")
             else:

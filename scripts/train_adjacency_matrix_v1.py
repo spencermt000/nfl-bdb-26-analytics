@@ -214,6 +214,17 @@ class DataProcessor:
         
         # Merge temporal features
         print("\n2. Merging temporal features...")
+        
+        # Ensure merge keys have matching data types
+        df['game_id'] = df['game_id'].astype(str)
+        df['play_id'] = df['play_id'].astype(float)
+        df['frame_id'] = df['frame_id'].astype(float)
+        
+        self.df_temporal['game_id'] = self.df_temporal['game_id'].astype(str)
+        self.df_temporal['play_id'] = self.df_temporal['play_id'].astype(float)
+        self.df_temporal['frame_id'] = self.df_temporal['frame_id'].astype(float)
+        print("   Converted merge keys to matching types")
+        
         temporal_features = [
             'game_id', 'play_id', 'frame_id',
             'n_players_tot', 'n_players_off', 'n_players_def'

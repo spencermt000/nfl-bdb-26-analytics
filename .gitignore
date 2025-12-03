@@ -1,0 +1,5 @@
+*.parquet
+/outputs/
+outputs/
+venv/
+data/

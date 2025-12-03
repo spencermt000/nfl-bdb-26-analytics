@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from utils import angle_difference
 import os
 
@@ -113,3 +114,26 @@ for week in range(1, 19):  # weeks 1-18
 print(f"\n{'='*60}")
 print("All weeks processed!")
 print(f"{'='*60}")
+
+
+
+parquet_files = sorted(Path('outputs/dataframe_c').glob('*.parquet'))
+
+print(f"Found {len(parquet_files)} parquet files")
+
+# Read and combine all parquet files
+dfs = []
+for file in parquet_files:
+    print(f"Reading {file.name}...")
+    df = pd.read_parquet(file)
+    dfs.append(df)
+    print(f"  Shape: {df.shape}")
+
+# Concatenate all dataframes
+combined_df = pd.concat(dfs, ignore_index=True)
+print(f"\nCombined dataframe shape: {combined_df.shape}")
+
+# Save combined dataframe
+output_file = 'outputs/dataframe_c/df_c_v1.parquet'
+combined_df.to_parquet(output_file, engine='pyarrow', index=False)
+print(f"Saved to {output_file}")

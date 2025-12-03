@@ -193,6 +193,11 @@ class DataProcessor:
             self.df_plays = self.df_plays.rename(columns={'old_game_id': 'game_id'})
             print("   Renamed 'old_game_id' to 'game_id' in play data")
         
+        # Ensure game_id has matching data types
+        df['game_id'] = df['game_id'].astype(str)
+        self.df_plays['game_id'] = self.df_plays['game_id'].astype(str)
+        print("   Converted game_id to string for consistent merging")
+        
         play_features = [
             'game_id', 'play_id', 'quarter', 'down', 'yards_to_go', 
             'pos_team_wp', 'defenders_in_the_box',

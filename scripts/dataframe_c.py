@@ -50,6 +50,36 @@ for week in range(1, 19):  # weeks 1-18
                 y_dist = player_b['y'] - player_a['y']
                 e_dist = np.sqrt(x_dist**2 + y_dist**2)
                 
+                # Ball landing coordinates (same for all players in the frame)
+                ball_land_x = player_a['ball_land_x']  # These are the same for all players
+                ball_land_y = player_a['ball_land_y']
+                
+                # Calculate distances from each player to ball landing spot
+                playerA_dist_to_landing = np.sqrt(
+                    (player_a['x'] - ball_land_x)**2 + 
+                    (player_a['y'] - ball_land_y)**2
+                )
+                playerB_dist_to_landing = np.sqrt(
+                    (player_b['x'] - ball_land_x)**2 + 
+                    (player_b['y'] - ball_land_y)**2
+                )
+                
+                # Calculate angle from each player to landing spot
+                # Angle from player A to landing
+                angle_A_to_landing = np.arctan2(
+                    ball_land_y - player_a['y'],
+                    ball_land_x - player_a['x']
+                ) * 180 / np.pi  # Convert to degrees
+                
+                # Angle from player B to landing
+                angle_B_to_landing = np.arctan2(
+                    ball_land_y - player_b['y'],
+                    ball_land_x - player_b['x']
+                ) * 180 / np.pi  # Convert to degrees
+                
+                # Relative angle between their angles to landing spot
+                pairwise_angle_to_landing = angle_difference(angle_A_to_landing, angle_B_to_landing)
+                
                 # Calculate relative angles
                 relative_angle_o = angle_difference(player_a['o'], player_b['o'])
                 relative_angle_dir = angle_difference(player_a['dir'], player_b['dir'])
@@ -95,7 +125,14 @@ for week in range(1, 19):  # weeks 1-18
                     'relative_angle_o': relative_angle_o,
                     'relative_angle_dir': relative_angle_dir,
                     'same_team': same_team,
-                    'player_rel_index': player_rel_index
+                    'player_rel_index': player_rel_index,
+                    # NEW: Ball landing coordinates
+                    'ball_land_x': ball_land_x,
+                    'ball_land_y': ball_land_y,
+                    # NEW: Derived features - distances to landing spot
+                    'playerA_dist_to_landing': playerA_dist_to_landing,
+                    'playerB_dist_to_landing': playerB_dist_to_landing,
+                    'pairwise_angle_to_landing': pairwise_angle_to_landing,
                 }
                 
                 output_rows.append(row)
@@ -134,6 +171,6 @@ combined_df = pd.concat(dfs, ignore_index=True)
 print(f"\nCombined dataframe shape: {combined_df.shape}")
 
 # Save combined dataframe
-output_file = 'outputs/dataframe_c/df_c_v1.parquet'
+output_file = 'outputs/dataframe_c/v1.parquet'
 combined_df.to_parquet(output_file, engine='pyarrow', index=False)
 print(f"Saved to {output_file}")

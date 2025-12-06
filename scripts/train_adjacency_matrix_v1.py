@@ -81,6 +81,7 @@ class Config:
     # Pilot mode - train on single game for quick testing
     PILOT_MODE = True  # Set to False for full training
     PILOT_GAME_ID = None  # Set to specific game_id or None for random
+    PILOT_NUM_GAMES = 8  # Number of games to use in pilot mode
     
     # Target variable
     # Options: 'e_dist' (regression), 'close_proximity' (classification), etc.
@@ -138,21 +139,31 @@ class DataProcessor:
             print("\n   🚀 PILOT MODE ENABLED 🚀")
             if self.config.PILOT_GAME_ID is not None:
                 # Use specified game
-                pilot_game_id = self.config.PILOT_GAME_ID
-                print(f"   Using specified game: {pilot_game_id}")
+                pilot_game_ids = [self.config.PILOT_GAME_ID]
+                print(f"   Using specified game: {pilot_game_ids[0]}")
             else:
-                # Pick random game
-                pilot_game_id = self.df_edges['game_id'].sample(1, random_state=self.config.RANDOM_SEED).iloc[0]
-                print(f"   Randomly selected game: {pilot_game_id}")
+                # Pick random games
+                unique_games = self.df_edges['game_id'].unique()
+                pilot_game_ids = np.random.choice(
+                    unique_games, 
+                    size=min(self.config.PILOT_NUM_GAMES, len(unique_games)),
+                    replace=False
+                )
+                pilot_game_ids = pilot_game_ids.tolist()
+                print(f"   Randomly selected {len(pilot_game_ids)} games:")
+                for gid in pilot_game_ids:
+                    print(f"      - {gid}")
             
-            self.df_edges = self.df_edges[self.df_edges['game_id'] == pilot_game_id]
+            self.df_edges = self.df_edges[self.df_edges['game_id'].isin(pilot_game_ids)]
             print(f"   Pilot shape: {self.df_edges.shape}")
             
-            # Count unique plays in pilot
+            # Count unique plays and games in pilot
+            n_games = self.df_edges['game_id'].nunique()
             n_plays = self.df_edges['play_id'].nunique()
             n_frames = self.df_edges['frame_id'].nunique() 
-            print(f"   Plays in game: {n_plays}")
-            print(f"   Frames in game: {n_frames}")
+            print(f"   Games: {n_games}")
+            print(f"   Plays: {n_plays}")
+            print(f"   Frames: {n_frames}")
         
         # Regular sampling (only if not in pilot mode)
         elif self.config.USE_SAMPLING:

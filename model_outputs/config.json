@@ -30,6 +30,7 @@
   "USE_SAMPLING": true,
   "PILOT_MODE": true,
   "PILOT_GAME_ID": null,
+  "PILOT_NUM_GAMES": 8,
   "TARGET_TYPE": "regression",
   "TARGET_COL": "e_dist",
   "PROXIMITY_THRESHOLD": 5.0

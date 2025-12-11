@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================================================
+# CRITICAL: Exclude large data files from Docker image
+# Data is mounted as volumes - no need to copy into image!
+# ============================================================================
+
+# Data files (will be mounted via volumes)
+data/**/*.parquet
+data/**/*.csv
+data/**/*.pkl
+data/**/*.pt
+data/**/*.json
+
+# Output files (will be mounted via volumes)
+outputs/**/*.parquet
+outputs/**/*.csv
+outputs/**/*.pkl
+outputs/**/*.pt
+outputs/**/*.png
+outputs/**/*.jpg
+
+# Model outputs (will be mounted via volumes)
+model_outputs/**/*.pt
+model_outputs/**/*.pkl
+model_outputs/**/*.json
+model_outputs/**/*.png
+
+# Keep README files for documentation
+!data/README.md
+!outputs/README.md
+!model_outputs/README.md

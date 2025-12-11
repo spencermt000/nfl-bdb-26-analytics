@@ -1,0 +1,27 @@
+services:
+  nfl-analytics:
+    build: .
+    container_name: nfl-bdb-2026
+    volumes:
+      # Mount data directory
+      - ./data:/app/data
+      # Mount scripts directory
+      - ./scripts:/app/scripts
+      # Mount outputs directory
+      - ./outputs:/app/outputs
+      # Mount model outputs
+      - ./model_outputs:/app/model_outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+    # Optional: Use GPU if available (uncomment if you have NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

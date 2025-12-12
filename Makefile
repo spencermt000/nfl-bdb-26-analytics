@@ -15,12 +15,19 @@ help:
 	@echo "  make shell          - Open bash shell in container"
 	@echo "  make python         - Open Python REPL in container"
 	@echo ""
-	@echo "Data Processing:"
+	@echo "Data Processing (v1 - original):"
 	@echo "  make df-a           - Process dataframe A"
 	@echo "  make df-b           - Process dataframe B"
 	@echo "  make df-c           - Process dataframe C"
 	@echo "  make df-d           - Process dataframe D"
 	@echo "  make process-all    - Process all dataframes in sequence"
+	@echo ""
+	@echo "Data Processing (v2 - improved):"
+	@echo "  make df-a-v2        - Process dataframe A v2"
+	@echo "  make df-b-v2        - Process dataframe B v2"
+	@echo "  make df-c-v2        - Process dataframe C v2"
+	@echo "  make df-d-v2        - Process dataframe D v2"
+	@echo "  make process-all-v2 - Process all v2 dataframes in sequence"
 	@echo ""
 	@echo "Training:"
 	@echo "  make train          - Train adjacency matrix model"
@@ -51,7 +58,7 @@ shell:
 python:
 	docker-compose run --rm nfl-analytics python
 
-# Process individual dataframes
+# Process individual dataframes (v1)
 df-a:
 	docker-compose run --rm nfl-analytics python scripts/dataframe_a.py
 
@@ -64,7 +71,20 @@ df-c:
 df-d:
 	docker-compose run --rm nfl-analytics python scripts/dataframe_d.py
 
-# Process all dataframes in sequence
+# Process individual dataframes (v2 - improved versions)
+df-a-v2:
+	docker-compose run --rm nfl-analytics python scripts/dataframe_a_v2.py
+
+df-b-v2:
+	docker-compose run --rm nfl-analytics python scripts/dataframe_b_v2.py
+
+df-c-v2:
+	docker-compose run --rm nfl-analytics python scripts/dataframe_c_v2.py
+
+df-d-v2:
+	docker-compose run --rm nfl-analytics python scripts/dataframe_d_v2.py
+
+# Process all dataframes in sequence (v1)
 process-all:
 	@echo "Processing all dataframes..."
 	docker-compose run --rm nfl-analytics bash -c "\
@@ -77,6 +97,20 @@ process-all:
 		python scripts/dataframe_d.py && \
 		echo '✓ Dataframe D complete' && \
 		echo '✓✓✓ All dataframes processed!'"
+
+# Process all dataframes in sequence (v2 - improved versions)
+process-all-v2:
+	@echo "Processing all v2 dataframes..."
+	docker-compose run --rm nfl-analytics bash -c "\
+		python scripts/dataframe_a_v2.py && \
+		echo '✓ Dataframe A v2 complete' && \
+		python scripts/dataframe_b_v2.py && \
+		echo '✓ Dataframe B v2 complete' && \
+		python scripts/dataframe_c_v2.py && \
+		echo '✓ Dataframe C v2 complete' && \
+		python scripts/dataframe_d_v2.py && \
+		echo '✓ Dataframe D v2 complete' && \
+		echo '✓✓✓ All v2 dataframes processed!'"
 
 # Train models
 train:

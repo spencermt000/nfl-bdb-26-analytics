@@ -1,3 +1,67 @@
+- [Introduction](#introduction)
+	- [Project](#project)
+	- [Goal](#goal)
+	- [Approach](#approach)
+- [TO-DO](#to-do)
+- [Decided-Upon](#decided-upon)
+	- [Framework Breakdown](#framework-breakdown)
+		- [Attention-Based Relationship Importance](#attention-based-relationship-importance)
+		- [Pass Play Spatio-Temporal Interaction Graph Model](#pass-play-spatio-temporal-interaction-graph-model)
+		- [Graph Structure](#graph-structure)
+		- [Temporal Architecture](#temporal-architecture)
+		- [Prediction Heads](#prediction-heads)
+		- [Defender Impact Quantification](#defender-impact-quantification)
+		- [Ideal Pursuit Trajectories](#ideal-pursuit-trajectories)
+		- [References](#references)
+- [Raw Data](#raw-data)
+	- [Player Tracking Data](#player-tracking-data)
+		- ["Inputs" (pre-landing)](#inputs-pre-landing)
+		- ["Outputs" (post-landing)](#outputs-post-landing)
+	- [Supplementary Data](#supplementary-data)
+		- [nflfastR supplementary data](#nflfastr-supplementary-data)
+		- [BDB supplementary data](#bdb-supplementary-data)
+		- [SumerSports supplementary data](#sumersports-supplementary-data)
+			- [sumer\_coverages\_frame.parquet](#sumer_coverages_frameparquet)
+			- [sumer\_coverages\_player\_play.parquet](#sumer_coverages_player_playparquet)
+	- [Merged Data](#merged-data)
+		- [2023\_inputs\_all.parquet](#2023_inputs_allparquet)
+		- [2023\_inputs\_all\_standardized.parquet](#2023_inputs_all_standardizedparquet)
+	- [Final Data](#final-data)
+		- [Standardization Process](#standardization-process)
+		- [Node-level information](#node-level-information)
+		- [Play-level information](#play-level-information)
+		- [Edge-level relationships](#edge-level-relationships)
+		- [Temporal information](#temporal-information)
+- [Scripts](#scripts)
+		- [Code Guidelines](#code-guidelines)
+	- [utils.py](#utilspy)
+		- [function index](#function-index)
+			- [supplement\_data](#supplement_data)
+			- [add\_play\_direction](#add_play_direction)
+			- [standardize\_play\_direction](#standardize_play_direction)
+			- [e\_dist](#e_dist)
+			- [angle\_difference](#angle_difference)
+			- [find\_nearest\_v2](#find_nearest_v2)
+	- [dataframe\_a.py](#dataframe_apy)
+		- [inputs](#inputs)
+		- [outputs](#outputs)
+	- [dataframe\_b.py](#dataframe_bpy)
+		- [inputs](#inputs-1)
+		- [outputs](#outputs-1)
+	- [dataframe\_c.py](#dataframe_cpy)
+		- [inputs](#inputs-2)
+		- [outputs](#outputs-2)
+	- [dataframe\_d.py](#dataframe_dpy)
+		- [inputs](#inputs-3)
+		- [outputs](#outputs-3)
+	- [{TO BE DETERMINED}](#to-be-determined)
+	- [{TO BE DETERMINED}](#to-be-determined-1)
+	- [{TO BE DETERMINED}](#to-be-determined-2)
+	- [{TO BE DETERMINED}](#to-be-determined-3)
+- [Converting into a Metric](#converting-into-a-metric)
+- [Conclusion \& Write Up](#conclusion--write-up)
+
+
 # Introduction
 ## Project
 **2026 NFL BigDataBowl, analytics submission**
@@ -13,8 +77,10 @@ We also are looking at different characteristics of the defender's movement as a
 
 # TO-DO
 - rework and clean up the data processing scripts
-	- add SumerSports supplementary data to the relevant dataframes
-	- retain more features in dataframeB
+	- dataframe C script is being worked on RN
+	- dataframe D script. what needs to change? or what can be improved?
+- NEXT UP
+  - begin work on the script to train/build the attention based adjacency matrix
 
 
 # Decided-Upon

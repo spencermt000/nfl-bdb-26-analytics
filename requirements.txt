@@ -22,3 +22,4 @@ ipython==8.18.1
 jupyter==1.0.0
 
 torch==2.0.1
+matplotlib

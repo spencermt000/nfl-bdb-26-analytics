@@ -1,39 +1,18 @@
-# Dockerfile for NFL BigDataBowl 2026 Analytics Project
-# Python 3.10 with scientific computing libraries
+# Start from the official Airflow image
+FROM apache/airflow:2.7.3
 
-FROM python:3.10-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
+# Switch to root to install system dependencies (if needed)
+USER root
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
+# Switch back to the airflow user to install Python packages
+USER airflow
+
+# Copy requirements file to the container
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies (including matplotlib)
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy project files
-COPY . .
-
-# Create necessary directories
-RUN mkdir -p data/train \
-    data/supplementary \
-    outputs/dataframe_a \
-    outputs/dataframe_b \
-    outputs/dataframe_c \
-    outputs/dataframe_d \
-    model_outputs
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
-
-# Default command (can be overridden)
-CMD ["python", "--version"]

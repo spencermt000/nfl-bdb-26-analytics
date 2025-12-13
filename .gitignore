@@ -16,6 +16,7 @@ logs/
 venv/
 ENV/
 env/
+archive/
 
 # ============================================================================
 # Project Data & Outputs (Large files - don't commit to git)

@@ -186,6 +186,7 @@ EDGE_FEATURES = [
     'same_team', 'ball_progress', 'frames_to_landing',
     # NEW v2: Domain-informed prior
     'attention_prior',
+    'coverage_scheme_encoded'
 ]
 edge_features_available = [f for f in EDGE_FEATURES if f in df_c_filtered.columns]
 

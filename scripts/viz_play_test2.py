@@ -313,14 +313,13 @@ def update(frame_idx):
             attn_avg = attn_weights.mean(dim=1).numpy()
             for i, (src, dst) in enumerate(edge_index.t().numpy()):
                 score = attn_avg[i]
-                # Only track edges connected to the targeted receiver
-                if score > 0.10:
-                    if src == targeted_receiver_pos:
-                        # Edge from targeted receiver to dst
-                        attention_scores[dst] = score
-                    elif dst == targeted_receiver_pos:
-                        # Edge from src to targeted receiver
-                        attention_scores[src] = score
+                # Track ALL edges where targeted receiver is the SOURCE
+                # This shows how much attention the receiver is paying to each defender
+                if src == targeted_receiver_pos and score > 0.05:
+                    # Edge FROM targeted receiver TO dst node
+                    if dst not in attention_scores:
+                        attention_scores[dst] = 0.0
+                    attention_scores[dst] += score  # Accumulate if multiple edges
 
         # Info Box
         info_text = (
@@ -355,7 +354,7 @@ def update(frame_idx):
         colors = 'grey'
 
     # Plot with bigger markers
-    ax.scatter(nodes['x'], nodes['y'], c=colors, s=250, zorder=2, edgecolors='white', linewidths=2)
+    ax.scatter(nodes['x'], nodes['y'], c=colors, s=400, zorder=2, edgecolors='white', linewidths=3)
 
     # 6. Add attention score labels to nodes
     for idx, (_, node) in enumerate(nodes.iterrows()):
@@ -363,8 +362,9 @@ def update(frame_idx):
             score = attention_scores[idx]
             # Display attention score in the center of the circle
             ax.text(node['x'], node['y'], f'{score:.2f}', 
-                   fontsize=9, ha='center', va='center', 
-                   fontweight='bold', color='black', zorder=3)
+                   fontsize=11, ha='center', va='center', 
+                   fontweight='bold', color='white', zorder=4,
+                   bbox=dict(boxstyle='round,pad=0.2', facecolor='black', alpha=0.7, edgecolor='none'))
 
     # 7. Draw ball ending spot as red square
     if ball_end_x is not None and ball_end_y is not None and pd.notna(ball_end_x) and pd.notna(ball_end_y):

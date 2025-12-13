@@ -2,7 +2,7 @@
 	- [Project](#project)
 	- [Goal](#goal)
 	- [Approach](#approach)
-- [TO-DO](#to-do)
+- [STATUS](#status)
 - [Decided-Upon](#decided-upon)
 	- [Framework Breakdown](#framework-breakdown)
 		- [Attention-Based Relationship Importance](#attention-based-relationship-importance)
@@ -13,25 +13,12 @@
 		- [Defender Impact Quantification](#defender-impact-quantification)
 		- [Ideal Pursuit Trajectories](#ideal-pursuit-trajectories)
 		- [References](#references)
-- [Raw Data](#raw-data)
-	- [Player Tracking Data](#player-tracking-data)
-		- ["Inputs" (pre-landing)](#inputs-pre-landing)
-		- ["Outputs" (post-landing)](#outputs-post-landing)
-	- [Supplementary Data](#supplementary-data)
-		- [nflfastR supplementary data](#nflfastr-supplementary-data)
-		- [BDB supplementary data](#bdb-supplementary-data)
-		- [SumerSports supplementary data](#sumersports-supplementary-data)
-			- [sumer\_coverages\_frame.parquet](#sumer_coverages_frameparquet)
-			- [sumer\_coverages\_player\_play.parquet](#sumer_coverages_player_playparquet)
-	- [Merged Data](#merged-data)
-		- [2023\_inputs\_all.parquet](#2023_inputs_allparquet)
-		- [2023\_inputs\_all\_standardized.parquet](#2023_inputs_all_standardizedparquet)
 	- [Final Data](#final-data)
 		- [Standardization Process](#standardization-process)
-		- [Node-level information](#node-level-information)
-		- [Play-level information](#play-level-information)
-		- [Edge-level relationships](#edge-level-relationships)
-		- [Temporal information](#temporal-information)
+		- [Dataframe A: Node-level information (Player-Frame Level)](#dataframe-a-node-level-information-player-frame-level)
+		- [Dataframe B: Play-level information](#dataframe-b-play-level-information)
+		- [Dataframe C: Edge-level relationships (Player-Player Interactions)](#dataframe-c-edge-level-relationships-player-player-interactions)
+		- [Dataframe D: Temporal information (Frame-Level Aggregates)](#dataframe-d-temporal-information-frame-level-aggregates)
 - [Scripts](#scripts)
 		- [Code Guidelines](#code-guidelines)
 	- [utils.py](#utilspy)
@@ -41,7 +28,10 @@
 			- [standardize\_play\_direction](#standardize_play_direction)
 			- [e\_dist](#e_dist)
 			- [angle\_difference](#angle_difference)
+			- [create\_play\_level\_coverage](#create_play_level_coverage)
 			- [find\_nearest\_v2](#find_nearest_v2)
+			- [aggregate\_coverage\_to\_play\_level](#aggregate_coverage_to_play_level)
+			- [load\_parquet\_to\_df](#load_parquet_to_df)
 	- [dataframe\_a.py](#dataframe_apy)
 		- [inputs](#inputs)
 		- [outputs](#outputs)
@@ -54,10 +44,14 @@
 	- [dataframe\_d.py](#dataframe_dpy)
 		- [inputs](#inputs-3)
 		- [outputs](#outputs-3)
-	- [{TO BE DETERMINED}](#to-be-determined)
-	- [{TO BE DETERMINED}](#to-be-determined-1)
-	- [{TO BE DETERMINED}](#to-be-determined-2)
-	- [{TO BE DETERMINED}](#to-be-determined-3)
+	- [train\_completion.py](#train_completionpy)
+		- [inputs](#inputs-4)
+		- [outputs](#outputs-4)
+		- [approach](#approach-1)
+	- [train\_yac\_epa.py](#train_yac_epapy)
+		- [inputs](#inputs-5)
+		- [outputs](#outputs-5)
+		- [approach](#approach-2)
 - [Converting into a Metric](#converting-into-a-metric)
 - [Conclusion \& Write Up](#conclusion--write-up)
 
@@ -75,12 +69,10 @@ Quantify how a defender's actions while the ball is in the air affects the end r
 Looking specifically at how the defender impacts the completion of a pass, the YAC production after a catch is made, and the overall EPA of the play.  
 We also are looking at different characteristics of the defender's movement as a proxy for "difficulty". These characteristics include the total distance the defender covers, the rate of his movement, the difficulty and quantity of changes of direction he makes, and the deviation from an "ideal" pursuit/action path.
 
-# TO-DO
-- rework and clean up the data processing scripts
-	- dataframe C script is being worked on RN
-	- dataframe D script. what needs to change? or what can be improved?
-- NEXT UP
-  - begin work on the script to train/build the attention based adjacency matrix
+# STATUS
+- all the data processing scripts are complete! 
+- the training DAG for training scripts train_yac_epa.py and train_completion.py is complete and working. 
+- we need to adjust our framework though. 
 
 
 # Decided-Upon
@@ -127,589 +119,203 @@ Finally, a multimodal trajectory module inspired by Social-BiGAT and STGAT gener
 &nbsp;
 &nbsp;
 
-# Raw Data
-## Player Tracking Data
-### "Inputs" (pre-landing)
-**Summary:**  the player tracking (spatio-temporal) data for each player for each frame of each play BEFORE the ball is caught/landed (hence, the "inputs" names)
-
-**File Location and Name:** 
-- data/train/input_2023_w01.csv
-- one for each week (eg. input_2023_w02.csv)
-
-**Columns:**
-- game_id
-- play_id
-- player_to_predict
-- nfl_id
-- frame_id
-- play_direction
-- absolute_yardline_number
-- player_name
-- player_height
-- player_weight
-- player_birth_date
-- player_position
-- player_side
-- player_role
-- x
-- y
-- s
-- a
-- dir
-- o
-- num_frames_output
-- ball_land_x
-- ball_land_y
-  
-### "Outputs" (post-landing)
-**Summary:**
-Reduced-columns player tracking data AFTER the ball is landed/caught
-
-**File Location and Name:**
-- data/train/output_2023_w01.csv
-- one for each week (eg. output_2023_w02.csv)
-
-**Columns:** 
-- game_id
-- play_id
-- nfl_id
-- frame_id
-- x
-- y
-
-&nbsp;
-## Supplementary Data
-###  nflfastR supplementary data
-**Summary:**
-**File Location and Name:**
-- sdv_pbp_raw.parquet
-**Columns:** 
-- play_id
-- game_id
-- old_game_id
-- home_team
-- away_team
-- season_type
-- week
-- posteam
-- posteam_type
-- defteam
-- side_of_field
-- yardline_100
-- game_date
-- quarter_seconds_remaining
-- half_seconds_remaining
-- game_seconds_remaining
-- game_half
-- quarter_end
-- drive
-- sp
-- qtr
-- down
-- goal_to_go
-- time
-- yrdln
-- ydstogo
-- ydsnet
-- desc
-- play_type
-- yards_gained
-- shotgun
-- no_huddle
-- qb_dropback
-- qb_kneel
-- qb_spike
-- qb_scramble
-- pass_length
-- pass_location
-- air_yards
-- yards_after_catch
-- run_location
-- run_gap
-- field_goal_result
-- kick_distance
-- extra_point_result
-- two_point_conv_result
-- home_timeouts_remaining
-- away_timeouts_remaining
-- timeout
-- timeout_team
-- td_team
-- td_player_name
-- td_player_id
-- posteam_timeouts_remaining
-- defteam_timeouts_remaining
-- total_home_score
-- total_away_score
-- posteam_score
-- defteam_score
-- score_differential
-- posteam_score_post
-- defteam_score_post
-- score_differential_post
-- no_score_prob
-- opp_fg_prob
-- opp_safety_prob
-- opp_td_prob
-- fg_prob
-- safety_prob
-- td_prob
-- extra_point_prob
-- two_point_conversion_prob
-- ep
-- epa
-- total_home_epa
-- total_away_epa
-- total_home_rush_epa
-- total_away_rush_epa
-- total_home_pass_epa
-- total_away_pass_epa
-- air_epa
-- yac_epa
-- comp_air_epa
-- comp_yac_epa
-- total_home_comp_air_epa
-- total_away_comp_air_epa
-- total_home_comp_yac_epa
-- total_away_comp_yac_epa
-- total_home_raw_air_epa
-- total_away_raw_air_epa
-- total_home_raw_yac_epa
-- total_away_raw_yac_epa
-- wp
-- def_wp
-- home_wp
-- away_wp
-- wpa
-- vegas_wpa
-- vegas_home_wpa
-- home_wp_post
-- away_wp_post
-- vegas_wp
-- vegas_home_wp
-- total_home_rush_wpa
-- total_away_rush_wpa
-- total_home_pass_wpa
-- total_away_pass_wpa
-- air_wpa
-- yac_wpa
-- comp_air_wpa
-- comp_yac_wpa
-- total_home_comp_air_wpa
-- total_away_comp_air_wpa
-- total_home_comp_yac_wpa
-- total_away_comp_yac_wpa
-- total_home_raw_air_wpa
-- total_away_raw_air_wpa
-- total_home_raw_yac_wpa
-- total_away_raw_yac_wpa
-- punt_blocked
-- first_down_rush
-- first_down_pass
-- first_down_penalty
-- third_down_converted
-- third_down_failed
-- fourth_down_converted
-- fourth_down_failed
-- incomplete_pass
-- touchback
-- interception
-- punt_inside_twenty
-- punt_in_endzone
-- punt_out_of_bounds
-- punt_downed
-- punt_fair_catch
-- kickoff_inside_twenty
-- kickoff_in_endzone
-- kickoff_out_of_bounds
-- kickoff_downed
-- kickoff_fair_catch
-- fumble_forced
-- fumble_not_forced
-- fumble_out_of_bounds
-- solo_tackle
-- safety
-- penalty
-- tackled_for_loss
-- fumble_lost
-- own_kickoff_recovery
-- own_kickoff_recovery_td
-- qb_hit
-- rush_attempt
-- pass_attempt
-- sack
-- touchdown
-- pass_touchdown
-- rush_touchdown
-- return_touchdown
-- extra_point_attempt
-- two_point_attempt
-- field_goal_attempt
-- kickoff_attempt
-- punt_attempt
-- fumble
-- complete_pass
-- assist_tackle
-- lateral_reception
-- lateral_rush
-- lateral_return
-- lateral_recovery
-- passer_player_id
-- passer_player_name
-- passing_yards
-- receiver_player_id
-- receiver_player_name
-- receiving_yards
-- rusher_player_id
-- rusher_player_name
-- rushing_yards
-- lateral_receiver_player_id
-- lateral_receiver_player_name
-- lateral_receiving_yards
-- lateral_rusher_player_id
-- lateral_rusher_player_name
-- lateral_rushing_yards
-- lateral_sack_player_id
-- lateral_sack_player_name
-- interception_player_id
-- interception_player_name
-- lateral_interception_player_id
-- lateral_interception_player_name
-- punt_returner_player_id
-- punt_returner_player_name
-- lateral_punt_returner_player_id
-- lateral_punt_returner_player_name
-- kickoff_returner_player_name
-- kickoff_returner_player_id
-- lateral_kickoff_returner_player_id
-- lateral_kickoff_returner_player_name
-- punter_player_id
-- punter_player_name
-- kicker_player_name
-- kicker_player_id
-- own_kickoff_recovery_player_id
-- own_kickoff_recovery_player_name
-- blocked_player_id
-- blocked_player_name
-- tackle_for_loss_1_player_id
-- tackle_for_loss_1_player_name
-- tackle_for_loss_2_player_id
-- tackle_for_loss_2_player_name
-- qb_hit_1_player_id
-- qb_hit_1_player_name
-- qb_hit_2_player_id
-- qb_hit_2_player_name
-- forced_fumble_player_1_team
-- forced_fumble_player_1_player_id
-- forced_fumble_player_1_player_name
-- forced_fumble_player_2_team
-- forced_fumble_player_2_player_id
-- forced_fumble_player_2_player_name
-- solo_tackle_1_team
-- solo_tackle_2_team
-- solo_tackle_1_player_id
-- solo_tackle_2_player_id
-- solo_tackle_1_player_name
-- solo_tackle_2_player_name
-- assist_tackle_1_player_id
-- assist_tackle_1_player_name
-- assist_tackle_1_team
-- assist_tackle_2_player_id
-- assist_tackle_2_player_name
-- assist_tackle_2_team
-- assist_tackle_3_player_id
-- assist_tackle_3_player_name
-- assist_tackle_3_team
-- assist_tackle_4_player_id
-- assist_tackle_4_player_name
-- assist_tackle_4_team
-- tackle_with_assist
-- tackle_with_assist_1_player_id
-- tackle_with_assist_1_player_name
-- tackle_with_assist_1_team
-- tackle_with_assist_2_player_id
-- tackle_with_assist_2_player_name
-- tackle_with_assist_2_team
-- pass_defense_1_player_id
-- pass_defense_1_player_name
-- pass_defense_2_player_id
-- pass_defense_2_player_name
-- fumbled_1_team
-- fumbled_1_player_id
-- fumbled_1_player_name
-- fumbled_2_player_id
-- fumbled_2_player_name
-- fumbled_2_team
-- fumble_recovery_1_team
-- fumble_recovery_1_yards
-- fumble_recovery_1_player_id
-- fumble_recovery_1_player_name
-- fumble_recovery_2_team
-- fumble_recovery_2_yards
-- fumble_recovery_2_player_id
-- fumble_recovery_2_player_name
-- sack_player_id
-- sack_player_name
-- half_sack_1_player_id
-- half_sack_1_player_name
-- half_sack_2_player_id
-- half_sack_2_player_name
-- return_team
-- return_yards
-- penalty_team
-- penalty_player_id
-- penalty_player_name
-- penalty_yards
-- replay_or_challenge
-- replay_or_challenge_result
-- penalty_type
-- defensive_two_point_attempt
-- defensive_two_point_conv
-- defensive_extra_point_attempt
-- defensive_extra_point_conv
-- safety_player_name
-- safety_player_id
-- season
-- cp
-- cpoe
-- series
-- series_success
-- series_result
-- order_sequence
-- start_time
-- time_of_day
-- stadium
-- weather
-- nfl_api_id
-- play_clock
-- play_deleted
-- play_type_nfl
-- special_teams_play
-- st_play_type
-- end_clock_time
-- end_yard_line
-- fixed_drive
-- fixed_drive_result
-- drive_real_start_time
-- drive_play_count
-- drive_time_of_possession
-- drive_first_downs
-- drive_inside20
-- drive_ended_with_score
-- drive_quarter_start
-- drive_quarter_end
-- drive_yards_penalized
-- drive_start_transition
-- drive_end_transition
-- drive_game_clock_start
-- drive_game_clock_end
-- drive_start_yard_line
-- drive_end_yard_line
-- drive_play_id_started
-- drive_play_id_ended
-- away_score
-- home_score
-- location
-- result
-- total
-- spread_line
-- total_line
-- div_game
-- roof
-- surface
-- temp
-- wind
-- home_coach
-- away_coach
-- stadium_id
-- game_stadium
-- aborted_play
-- success
-- passer
-- passer_jersey_number
-- rusher
-- rusher_jersey_number
-- receiver
-- receiver_jersey_number
-- pass
-- rush
-- first_down
-- special
-- play
-- passer_id
-- rusher_id
-- receiver_id
-- name
-- jersey_number
-- id
-- fantasy_player_name
-- fantasy_player_id
-- fantasy
-- fantasy_id
-- out_of_bounds
-- home_opening_kickoff
-- qb_epa
-- xyac_epa
-- xyac_mean_yardage
-- xyac_median_yardage
-- xyac_success
-- xyac_fd
-- xpass
-- pass_oe
-
-
-### BDB supplementary data
-**Summary:**
-**File Location and Name:**
-**Columns:** 
-- game_id
-- season
-- week
-- game_date
-- game_time_eastern
-- home_team_abbr
-- visitor_team_abbr
-- play_id
-- play_description
-- quarter
-- game_clock
-- down
-- yards_to_go
-- possession_team
-- defensive_team
-- yardline_side
-- yardline_number
-- pre_snap_home_score
-- pre_snap_visitor_score
-- play_nullified_by_penalty
-- pass_result
-- pass_length
-- offense_formation
-- receiver_alignment
-- route_of_targeted_receiver
-- play_action
-- dropback_type
-- dropback_distance
-- pass_location_type
-- defenders_in_the_box
-- team_coverage_man_zone
-- team_coverage_type
-- penalty_yards
-- pre_penalty_yards_gained
-- yards_gained
-- expected_points
-- expected_points_added
-- pre_snap_home_team_win_probability
-- pre_snap_visitor_team_win_probability
-- home_team_win_probability_added
-- visitor_team_win_probility_added
-
-
-### SumerSports supplementary data
-#### sumer_coverages_frame.parquet
-**Summary:** the predicted coverage scheme at each frame/time-step for each play
-
-**Columns:** 
-- game_id
-- play_id
-- frame_id
-- coverage_scheme
-- coverage_scheme__COVER_0
-- coverage_scheme__COVER_1
-- coverage_scheme__COVER_2
-- coverage_scheme__COVER_2_MAN
-- coverage_scheme__COVER_3
-- coverage_scheme__COVER_4
-- coverage_scheme__COVER_6
-- coverage_scheme__MISC
-- coverage_scheme__PREVENT
-- coverage_scheme__REDZONE
-- coverage_scheme__SHORT
-  
-#### sumer_coverages_player_play.parquet
-**Summary:** each defenders's coverage responsibility on an individual play
-
-**Columns:** 
-- game_id
-- play_id
-- nfl_id
-- coverage_responsibility
-- targeted_defender
-- coverage_responsibility_side
-- alignment
-
-&nbsp;
-## Merged Data
-### 2023_inputs_all.parquet
-**Summary:** merged dataset of all the weeks of the raw input_2023_wXX.csv files
-
-**Columns:** 
-- game_id
-- play_id
-- player_to_predict
-- nfl_id
-- frame_id
-- play_direction
-- absolute_yardline_number
-- player_name
-- player_height
-- player_weight
-- player_birth_date
-- player_position
-- player_side
-- player_role
-- x
-- y
-- s
-- a
-- dir
-- o
-- num_frames_output
-- ball_land_x
-- ball_land_y
-
-  
-### 2023_inputs_all_standardized.parquet
-**Summary:** merged dataset of all the weeks of the raw input_2023_wXX.csv files, but the x, y, dir, and o columns are standardized to be consistent across plays/field positions
-**Columns:** 
-- game_id
-- play_id
-- player_to_predict
-- nfl_id
-- frame_id
-- play_direction
-- absolute_yardline_number
-- player_name
-- player_height
-- player_weight
-- player_birth_date
-- player_position
-- player_side
-- player_role
-- x
-- y
-- s
-- a
-- dir
-- o
-- num_frames_output
-- ball_land_x
-- ball_land_y
-
-  
 &nbsp;
 ## Final Data
 ### Standardization Process
 - uses the supplementary data to get yardline, possession team, and side of field
 - standardizes gps data (x, y, direction of movement, direction of player orientation) to make each play offense on the left -> trying to score on the going right (assuming the field is horizontal with an endzone on the left and right sides)
 
-### Node-level information
+### Dataframe A: Node-level information (Player-Frame Level)
+**File Location:** `outputs/dataframe_a/v1.parquet`
 
-### Play-level information
+**Summary:** Player-level tracking and contextual data at each frame, including kinematics, roles, coverage assignments, and ball proximity.
 
-### Edge-level relationships
+**Total Columns:** 51
 
-### Temporal information
+**Column Categories:**
+
+*Identifiers & Context (12):*
+- game_id, play_id, frame_id, nfl_id
+- player_name, player_height, player_weight, player_birth_date, player_age
+- player_position, player_side, player_role
+
+*Spatial Coordinates & Kinematics (6):*
+- x, y - Current position
+- s - Speed
+- a - Acceleration
+- dir - Direction of movement (degrees)
+- o - Orientation/body facing direction (degrees)
+
+*Post-Catch Position (3):*
+- output_x, output_y - Final position after play ends
+- dist_to_final_pos - Distance from current position to final position
+
+*Ball Proximity (3):*
+- ball_land_x, ball_land_y - Ball landing coordinates
+- e_dist_ball_land - Euclidean distance to ball landing point
+
+*Derived Kinematic Vectors (6):*
+- v_x, v_y - Velocity components
+- a_x, a_y - Acceleration components
+- o_x, o_y - Orientation unit vectors
+
+*Field Position (1):*
+- los_dist - Distance to line of scrimmage
+
+*Role Indicators (3):*
+- isTargeted - Binary flag for targeted receiver
+- isPasser - Binary flag for quarterback
+- isRouteRunner - Binary flag for route-running receivers
+
+*Coverage Assignment (4):*
+- coverage_responsibility - Defender's coverage assignment
+- targeted_defender - Binary flag if defender is covering targeted receiver
+- coverage_responsibility_side - Side of field for coverage
+- alignment - Defender's pre-snap alignment
+
+*Coverage Scheme (11):*
+- coverage_scheme - Primary coverage type
+- coverage_scheme__COVER_0 through coverage_scheme__SHORT - Probability distributions for 10 coverage scheme types
+
+### Dataframe B: Play-level information
+**File Location:** `outputs/dataframe_b/v1.parquet`
+
+**Summary:** Play-level context and outcomes, including game situation, formation, ball trajectory, and EPA metrics.
+
+**Total Columns:** 30
+
+**Column Categories:**
+
+*Game Context (5):*
+- season, week, play_id, game_id, quarter
+
+*Down & Distance (3):*
+- down, yards_to_go, yardline_number
+
+*Teams & Field Position (3):*
+- possession_team, defensive_team, yardline_side
+
+*Play Outcome (3):*
+- pass_result - Completion status
+- yards_gained - Actual yards gained
+- expected_points_added - EPA for the play
+
+*Formation & Pre-Snap (4):*
+- offense_formation - Offensive formation type
+- receiver_alignment - Receiver alignment
+- defenders_in_the_box - Number of defenders in box
+- shotgun - Binary flag for shotgun formation
+
+*Ball Trajectory (5):*
+- start_ball_x, start_ball_y, start_ball_o - Ball release position and orientation
+- ball_flight_distance - Total distance ball travels
+- ball_flight_frames - Duration of ball flight in frames
+
+*Pass Characteristics (3):*
+- throw_direction - Direction of throw relative to field
+- throw_type - Type of throw (e.g., short, deep)
+- expected_points - EPA before play
+
+*Advanced Metrics (7):*
+- xpass - Expected pass completion probability
+- cp - Actual completion probability
+- comp_yac_epa - **TARGET for YAC model** - Expected points added from yards after catch on completions
+- comp_air_epa - Expected points added from air yards on completions
+
+### Dataframe C: Edge-level relationships (Player-Player Interactions)
+**File Location:** `outputs/dataframe_c/v1.parquet`
+
+**Summary:** Pairwise player-player interaction features at each frame, capturing spatial relationships, relative motion, and contextual matchup information.
+
+**Total Columns:** 63
+
+**Column Categories:**
+
+*Identifiers (5):*
+- game_id, play_id, frame_id, edge_id
+- playerA_id, playerB_id
+
+*Player A Features (10):*
+- playerA_x, playerA_y - Position
+- playerA_s, playerA_a - Speed and acceleration
+- playerA_dir, playerA_o - Direction and orientation
+- playerA_v_x, playerA_v_y - Velocity components
+- playerA_a_x, playerA_a_y - Acceleration components
+
+*Player A Context (3):*
+- playerA_role, playerA_side, playerA_position
+
+*Player B Features (10):*
+- playerB_x, playerB_y - Position
+- playerB_s, playerB_a - Speed and acceleration
+- playerB_dir, playerB_o - Direction and orientation
+- playerB_v_x, playerB_v_y - Velocity components
+- playerB_a_x, playerB_a_y - Acceleration components
+
+*Player B Context (3):*
+- playerB_role, playerB_side, playerB_position
+
+*Pairwise Spatial Features (5):*
+- x_dist, y_dist - Component distances
+- e_dist - Euclidean distance between players
+- relative_angle_o - Relative body orientation angle
+- relative_angle_dir - Relative movement direction angle
+
+*Ball Proximity - Player A (4):*
+- playerA_dist_to_landing - Distance to ball landing point
+- playerA_dist_to_ball_current - Distance to current ball position
+- playerA_angle_to_ball_current - Angle to current ball position
+- playerA_angle_to_ball_landing - Angle to ball landing point
+
+*Ball Proximity - Player B (4):*
+- playerB_dist_to_landing - Distance to ball landing point
+- playerB_dist_to_ball_current - Distance to current ball position
+- playerB_angle_to_ball_current - Angle to current ball position
+- playerB_angle_to_ball_landing - Angle to ball landing point
+
+*Ball Convergence (3):*
+- pairwise_angle_to_landing - Angle between players relative to ball landing
+- playerA_ball_convergence - Rate at which player A approaches ball
+- playerB_ball_convergence - Rate at which player B approaches ball
+
+*Relative Motion (3):*
+- relative_v_x, relative_v_y - Relative velocity components
+- relative_speed - Relative speed magnitude
+
+*Team Affiliation (1):*
+- same_team - Binary flag indicating if players are on same team
+
+*Ball State (5):*
+- ball_land_x, ball_land_y - Ball landing coordinates
+- ball_x_t, ball_y_t - Current ball position
+- ball_progress - Proportion of ball flight completed (0-1)
+
+*Temporal (1):*
+- frames_to_landing - Frames remaining until ball lands
+
+*Coverage Context (4):*
+- playerA_coverage, playerB_coverage - Coverage assignments
+- playerA_targeted, playerB_targeted - Binary flags for targeting
+- coverage_scheme - Coverage scheme for this frame
+
+### Dataframe D: Temporal information (Frame-Level Aggregates)
+**File Location:** `outputs/dataframe_d/v1.parquet`
+
+**Summary:** Frame-level aggregate statistics tracking the number of players at each frame, useful for temporal modeling and graph size tracking.
+
+**Total Columns:** 7
+
+**Columns:**
+- game_id, play_id, frame_id - Identifiers
+- num_frames_output - Total number of post-catch frames for this play
+- n_players_tot - Total number of players tracked at this frame
+- n_players_off - Number of offensive players at this frame
+- n_players_def - Number of defensive players at this frame
+
+**Purpose:** 
+- Track player counts over time for graph construction
+- Validate data completeness (should have 22 players typically)
+- Support temporal sequence modeling by providing context on graph size changes
   
 &nbsp;
 &nbsp;
@@ -723,11 +329,12 @@ Reduced-columns player tracking data AFTER the ball is landed/caught
 - Maximize computational efficiency
 
 ## utils.py
-general source of commonly used functions to be called across other scripts
+General source of commonly used functions to be called across other scripts.
+
 ### function index
+
 #### supplement_data
 **What it does:** Merges supplemental play-by-play data with training data, then merges test output data (renaming x/y columns to x_output/y_output)
-
 
 **Inputs:**
 - supplemental_df: Supplemental play-by-play data
@@ -775,6 +382,20 @@ general source of commonly used functions to be called across other scripts
 **Outputs:**
 - Float: Smallest angular difference in range [0, 180]
 
+#### create_play_level_coverage
+**What it does:** Creates play-level coverage data by extracting coverage scheme at ball release (first frame of input data) and ball landing (first frame of output data) from SumerSports frame-level coverage data.
+
+**Inputs:**
+- input_tracking_df: Player tracking data before ball lands (input files) with game_id, play_id, frame_id
+- output_tracking_df: Player tracking data after ball lands (output files) with game_id, play_id, frame_id
+- sumer_coverage_frame_df: SumerSports frame-level coverage data with coverage schemes and probabilities
+
+**Outputs:**
+- DataFrame with play-level coverage featuring:
+  - game_id, play_id
+  - start_scheme, start_cover_0, start_cover_1, ..., start_cover_SHORT (coverage at ball release)
+  - land_scheme, land_cover_0, land_cover_1, ..., land_cover_SHORT (coverage at ball landing)
+
 #### find_nearest_v2
 **What it does:** For each player at each frame, finds their n nearest same-team and opposing-team players by Euclidean distance
 
@@ -784,9 +405,37 @@ general source of commonly used functions to be called across other scripts
 - n_opp_team: Number of nearest opposing-team players to find
 
 **Outputs:**
-- DataFrame with columns for game_id, play_id, frame_id, root_player_id, and nearest_same_1, nearest_same_2, ..., nearest_opp_1, nearest_opp_2, etc.
+- DataFrame with columns for game_id, play_id, frame_id, root_player_id, total_players, total_same_team, total_opp_team, and nearest_same_1, nearest_same_2, ..., nearest_opp_1, nearest_opp_2, etc.
 
+#### aggregate_coverage_to_play_level
+**What it does:** Aggregates frame-level coverage data to play-level by extracting coverage at ball release (first frame) and ball arrival (last frame before catch). Also calculates if coverage changed during the play.
 
+**Inputs:**
+- coverage_frame_df: SumerSports frame-level coverage data with game_id, play_id, frame_id, coverage_scheme, and probability columns
+- tracking_df: Tracking data with game_id, play_id, frame_id, num_frames_output (used to determine first/last frames)
+
+**Outputs:**
+- DataFrame with play-level coverage data:
+  - game_id, play_id
+  - coverage_at_release, coverage_at_arrival (categorical coverage schemes)
+  - coverage_changed (1 if different, 0 if same)
+  - prob_cover_0_release, prob_cover_1_release, etc. (probabilities at release)
+  - prob_cover_0_arrival, prob_cover_1_arrival, etc. (probabilities at arrival)
+
+#### load_parquet_to_df
+**What it does:** Loads a parquet file into a pandas DataFrame with error checking and logging.
+
+**Inputs:**
+- file_path (str): Path to the parquet file
+- df_name (str, optional): Name for the DataFrame (for logging purposes)
+
+**Outputs:**
+- pd.DataFrame: Loaded dataframe
+
+**Example usage:**
+```python
+df_a = load_parquet_to_df('outputs/dataframe_a/v2.parquet', 'df_a')
+```
 
 ## dataframe_a.py
 used to create the node/player level attributes, involves player coordinate data, player role information, etc
@@ -807,14 +456,173 @@ used to create the node/player level attributes, involves player coordinate data
 ### outputs
 
 &nbsp;
-## {TO BE DETERMINED}
+## train_completion.py
+Script that trains a graph attention network to predict **pass completion probability** as a **binary classification task**. This is the first of two prediction models in the project.
 
-## {TO BE DETERMINED}
+### inputs
+- `outputs/dataframe_a/v1.parquet` - Node features (player-level data)
+- `outputs/dataframe_b/v1.parquet` - Play context and ball trajectory data
+- `outputs/dataframe_c/v1.parquet` or `v1_pilot_3games_old.parquet` - Edge features (player-player interaction data)
+- `outputs/dataframe_d/v1.parquet` - Additional data (loaded but not actively used in current implementation)
 
-## {TO BE DETERMINED}
+### outputs
+- `model_outputs/attention/best_model.pth` - Best model checkpoint (lowest validation loss)
+- `model_outputs/attention/final_model.pth` - Final model state after training completes
+- `model_outputs/attention/nan_batch_{epoch}_{batch_idx}.pt` - Debugging data for any batches that produce NaN/Inf values
 
-## {TO BE DETERMINED}
+### approach
 
+**Model Task:** Binary classification to predict pass completion (0 = incomplete, 1 = complete)
+
+**Architecture:**
+1. **Multi-Head Graph Attention Network** with 4 attention heads
+   - Node encoder: Processes player features (16 features including position, velocity, acceleration, orientation, ball distance, role indicators)
+   - Edge encoder: Processes interaction features (21 features including distances, angles, ball-related metrics, team affiliation, temporal progress)
+   - Query/Key/Value projections for multi-head attention
+   - Edge-aware attention scoring that incorporates both node and edge information
+   - Softmax aggregation per destination node
+   - Residual connection from input to output
+
+2. **Completion Prediction Head**
+   - Takes graph-level embedding (mean of all node embeddings)
+   - 2-layer MLP: 128 → 64 (ReLU + Dropout 0.2) → 1 (Sigmoid)
+   - Outputs probability of completion
+
+**Node Features (16 total):**
+- Spatial: x, y, s (speed), a (acceleration), dir (direction), o (orientation)
+- Velocity vectors: v_x, v_y
+- Acceleration vectors: a_x, a_y
+- Orientation vectors: o_x, o_y
+- Ball proximity: e_dist_ball_land (Euclidean distance to ball landing point)
+- Role indicators: isPasser, isTargeted, isRouteRunner
+
+**Edge Features (21 total):**
+- Spatial distances: e_dist (Euclidean distance), x_dist, y_dist
+- Relative angles: relative_angle_o, relative_angle_dir
+- Ball-related distances: playerA_dist_to_landing, playerB_dist_to_landing, playerA_dist_to_ball_current, playerB_dist_to_ball_current
+- Ball-related angles: playerA_angle_to_ball_current, playerB_angle_to_ball_current, playerA_angle_to_ball_landing, playerB_angle_to_ball_landing
+- Ball convergence: playerA_ball_convergence, playerB_ball_convergence
+- Relative velocity: relative_v_x, relative_v_y, relative_speed
+- Team affiliation: same_team (binary)
+- Temporal: ball_progress, frames_to_landing
+
+**Data Processing:**
+1. Filters to relevant players only: Passers, route runners, and coverage defenders
+2. Filters edges to only include interactions between relevant players
+3. Z-score normalizes all features using mean and std from training data
+4. Creates graph structure with variable number of nodes/edges per frame
+5. Uses 80/20 train/validation split
+
+**Training Configuration:**
+- Loss function: Binary Cross Entropy (BCE)
+- Optimizer: Adam with learning rate 0.001
+- Batch size: 1 (due to variable graph sizes)
+- Training time limit: 5 minutes (configurable via MAX_TRAIN_TIME_MINUTES)
+- Pilot mode available: Can train on 3-game subset for rapid testing
+- Device: GPU if available, otherwise CPU
+
+**Robustness Features:**
+- Handles empty graphs by skipping batches
+- Transposes edge_index to correct [2, N] shape if needed
+- Detects NaN/Inf in predictions and saves problematic batches for debugging
+- Clamps predictions and targets to [1e-7, 1-1e-7] range to prevent numerical instability
+- Logs progress every 100 batches
+- Saves best model based on validation loss
+
+**Key Implementation Details:**
+- Each graph represents one frame of one play
+- Graph nodes = filtered players (QB + route runners + coverage defenders)
+- Graph edges = all pairwise interactions between these players
+- Target = binary completion outcome from df_b
+- Model learns to predict completion probability given the spatial-temporal state at each frame
+
+## train_yac_epa.py
+Script that trains a graph attention network to predict **completed YAC EPA** as a **continuous regression task**. This is the second prediction model that focuses specifically on yards-after-catch expected points added for completed passes.
+
+### inputs
+- `outputs/dataframe_a/v1.parquet` - Node features (player-level data)
+- `outputs/dataframe_b/v1.parquet` - Play context data including **comp_yac_epa** target variable
+- `outputs/dataframe_c/v1.parquet` or `v1_pilot_3games.parquet` - Edge features (player-player interaction data)
+
+### outputs
+- `model_outputs/attention_yac/yac_model.pth` - Trained YAC EPA prediction model (saved at best validation loss)
+
+### approach
+
+**Model Task:** Regression to predict comp_yac_epa (continuous value representing expected points added from yards after catch on completed passes)
+
+**Architecture:**
+1. **Multi-Head Graph Attention Network** with 4 attention heads
+   - Identical attention mechanism to completion model
+   - Node encoder: Processes 16 player features
+   - Edge encoder: Processes 21 interaction features (UPDATED to match completion model)
+   - Query/Key/Value projections for multi-head attention
+   - Edge-aware attention scoring
+   - Softmax aggregation per destination node
+   - Residual connection
+
+2. **YAC EPA Prediction Head**
+   - Takes graph-level embedding (mean of all node embeddings)
+   - 2-layer MLP: 128 → 64 (ReLU + Dropout 0.2) → 1 (Linear output)
+   - Outputs continuous YAC EPA value (no activation on final layer for regression)
+
+**Node Features (16 total - identical to completion model):**
+- Spatial: x, y, s, a, dir, o
+- Velocity vectors: v_x, v_y
+- Acceleration vectors: a_x, a_y
+- Orientation vectors: o_x, o_y
+- Ball proximity: e_dist_ball_land
+- Role indicators: isPasser, isTargeted, isRouteRunner
+
+**Edge Features (21 total - UPDATED to match completion model):**
+- Spatial distances: e_dist, x_dist, y_dist
+- Relative angles: relative_angle_o, relative_angle_dir
+- Ball-related distances: playerA_dist_to_landing, playerB_dist_to_landing, playerA_dist_to_ball_current, playerB_dist_to_ball_current
+- **Ball-related angles (NEW):** playerA_angle_to_ball_current, playerB_angle_to_ball_current, playerA_angle_to_ball_landing, playerB_angle_to_ball_landing
+- Ball convergence: playerA_ball_convergence, playerB_ball_convergence
+- Relative velocity: relative_v_x, relative_v_y, relative_speed
+- Team affiliation: same_team
+- Temporal: ball_progress, frames_to_landing
+
+**Data Processing:**
+1. Filters to relevant players: Passers, route runners, and coverage defenders
+2. Filters edges between relevant players only
+3. Z-score normalizes features using training set statistics
+4. Handles missing comp_yac_epa values by defaulting to 0.0
+5. Creates variable-size graphs per frame
+6. Uses 80/20 train/validation split with random seed 42
+
+**Training Configuration:**
+- Loss function: Mean Squared Error (MSE)
+- Optimizer: Adam with learning rate 0.001
+- Batch size: 1 (variable graph sizes)
+- Training time limit: 8 minutes (configurable via MAX_TRAIN_TIME_MINUTES)
+- Pilot mode available: 3-game subset for rapid iteration
+- Device: GPU if available, otherwise CPU
+
+**Robustness Features:**
+- Skips batches with empty edge_index or edge_features
+- Transposes edge_index to [2, N_edges] format if needed
+- Validates edge_index shape before forward pass
+- Handles missing comp_yac_epa values gracefully
+- Saves best model based on lowest validation MSE
+- Progress logging every 500 batches
+- Time-based early stopping
+
+**Key Differences from Completion Model:**
+1. **Target variable:** comp_yac_epa (continuous) instead of completion (binary)
+2. **Loss function:** MSE instead of BCE
+3. **Output head:** Linear output instead of Sigmoid
+4. **Training time:** 8 minutes instead of 5 minutes
+5. **Edge features:** Updated to include 4 additional angle features (21 total vs previous 17)
+6. **Progress logging:** Every 500 batches instead of 100
+
+**Key Implementation Details:**
+- Each graph = one frame of one play
+- Target = comp_yac_epa from df_b (expected points added from YAC on completed passes)
+- Model learns to predict YAC EPA given spatial-temporal state at catch point
+- Only relevant for completed passes (though trained on all frames)
+- Complements completion model to provide full EPA decomposition: completion probability × YAC EPA
 
 &nbsp;
 &nbsp;

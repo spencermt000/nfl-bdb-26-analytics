@@ -28,4 +28,4 @@ print(f"\nSummary statistics:")
 print(output_df[['n_players_tot', 'n_players_off', 'n_players_def']].describe())
 
 output_df.to_parquet('outputs/dataframe_d/v1.parquet', engine='pyarrow', index=False)
-print("Saved to 2023_input_standardized.parquet")
+print("Saved to dataframe_d/v1.parquet")

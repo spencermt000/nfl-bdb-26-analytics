@@ -1,3 +1,4 @@
+- [DOCKER](#docker)
 - [STEP 1: PREPROCESS](#step-1-preprocess)
   - [Dataframe A: Node-Level](#dataframe-a-node-level)
     - [Summary](#summary)
@@ -13,6 +14,13 @@
     - [Summary](#summary-3)
     - [Columns](#columns-2)
 
+
+
+
+# DOCKER
+- copy scripts: docker cp scripts/train_epa_distribution.py nfl-bdb-airflow-airflow-scheduler-1:/opt/airflow/project/scripts/
+- run it: docker exec nfl-bdb-airflow-airflow-scheduler-1 \
+  python /opt/airflow/project/scripts/dataframe_c_v2.py
 
 # STEP 1: PREPROCESS
 ## Dataframe A: Node-Level

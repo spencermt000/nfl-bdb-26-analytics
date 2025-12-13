@@ -552,7 +552,7 @@ for idx, frame_row in unique_frames.iterrows():
                 playerB_ball_convergence = 1 if dot_product > 0 else 0
             
             # Same team check
-            same_team = (player_a.get('player_side') == player_b.get('player_side'))
+            same_team = int(player_a.get('player_side') == player_b.get('player_side'))
             
             # Build edge row
             row = {

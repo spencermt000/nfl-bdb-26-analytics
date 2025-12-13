@@ -71,7 +71,7 @@ LEARNING_RATE = 0.001
 BATCH_SIZE = 1  # Keep 1 for variable graph sizes
 
 # --- TIME-BASED TRAINING CONFIGURATION ---
-MAX_TRAIN_TIME_MINUTES = 6
+MAX_TRAIN_TIME_MINUTES = 8
 # -----------------------------------------
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

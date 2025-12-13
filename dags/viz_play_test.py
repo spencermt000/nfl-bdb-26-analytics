@@ -24,17 +24,18 @@ import sys
 # Append scripts path for utils
 sys.path.append('scripts')
 from utils import load_parquet_to_df
-
 # ============================================================================
-# 1. Model Definitions (Must match Training Scripts)
+# 1. Model Definitions
 # ============================================================================
 
+# --- COMPLETION MODEL ARCHITECTURE ---
 class MultiHeadGraphAttention(nn.Module):
     def __init__(self, node_in_dim, edge_in_dim, hidden_dim, n_heads=4):
         super().__init__()
         self.n_heads = n_heads
         self.head_dim = hidden_dim // n_heads
         
+        # Completion model used Sequential encoders
         self.node_encoder = nn.Sequential(
             nn.Linear(node_in_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
         )
@@ -57,19 +58,15 @@ class MultiHeadGraphAttention(nn.Module):
         V = self.W_V(h).view(N, self.n_heads, self.head_dim)
         
         src, dst = edge_index
-        
-        # Calculate Scores
         scores = (Q[src] * K[dst]).sum(dim=-1) / (self.head_dim ** 0.5)
         scores = scores + self.edge_attn(e)
         
-        # Softmax (Attention Weights)
         attn_weights = torch.zeros_like(scores)
         for i in range(N):
             mask = (src == i)
             if mask.any():
                 attn_weights[mask] = F.softmax(scores[mask], dim=0)
         
-        # We perform the rest of the forward pass just to be safe, though we only need weights for viz
         weighted_V = V[src] * attn_weights.unsqueeze(-1)
         out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
         out.index_add_(0, dst, weighted_V)
@@ -82,25 +79,72 @@ class AttentionAdjacencyModel(nn.Module):
         super().__init__()
         self.attention = MultiHeadGraphAttention(node_in, edge_in, hidden, n_heads)
         self.completion_head = nn.Sequential(
-            nn.Linear(hidden, 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid()
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1), nn.Sigmoid()
+        )
+        self.epa_head = nn.Sequential(
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1)
         )
     def forward(self, n, ei, ef, bp):
         h, weights = self.attention(n, ei, ef, bp)
         h_graph = h.mean(dim=0).unsqueeze(0).float()
         return self.completion_head(h_graph), weights
 
+
+# --- YAC MODEL ARCHITECTURE (Specific) ---
+class YacGAT(nn.Module):
+    def __init__(self, node_in_dim, edge_in_dim, hidden_dim, n_heads=4):
+        super().__init__()
+        self.n_heads = n_heads
+        self.head_dim = hidden_dim // n_heads
+        
+        # YAC model used simple Linear encoders (Architecture Mismatch Fix)
+        self.node_encoder = nn.Linear(node_in_dim, hidden_dim)
+        self.edge_encoder = nn.Linear(edge_in_dim, hidden_dim)
+        
+        self.W_Q = nn.Linear(hidden_dim, hidden_dim)
+        self.W_K = nn.Linear(hidden_dim, hidden_dim)
+        self.W_V = nn.Linear(hidden_dim, hidden_dim)
+        self.edge_attn = nn.Linear(hidden_dim, n_heads)
+        self.out_proj = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, node_feat, edge_index, edge_feat, ball_progress):
+        N = node_feat.shape[0]
+        # YAC model applied ReLU in forward pass
+        h = F.relu(self.node_encoder(node_feat))
+        e = F.relu(self.edge_encoder(edge_feat))
+        
+        Q = self.W_Q(h).view(N, self.n_heads, self.head_dim)
+        K = self.W_K(h).view(N, self.n_heads, self.head_dim)
+        V = self.W_V(h).view(N, self.n_heads, self.head_dim)
+        
+        src, dst = edge_index
+        scores = (Q[src] * K[dst]).sum(dim=-1) / (self.head_dim ** 0.5)
+        scores = scores + self.edge_attn(e)
+        
+        attn_weights = torch.zeros_like(scores)
+        for i in range(N):
+            mask = (src == i)
+            if mask.any():
+                attn_weights[mask] = F.softmax(scores[mask], dim=0)
+                
+        weighted_V = V[src] * attn_weights.unsqueeze(-1)
+        out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
+        out.index_add_(0, dst, weighted_V)
+        out = self.out_proj(out.view(N, -1))
+        return out + h, attn_weights
+
 class YacPredictionModel(nn.Module):
     def __init__(self, node_in, edge_in, hidden, n_heads):
         super().__init__()
-        self.gat = MultiHeadGraphAttention(node_in, edge_in, hidden, n_heads)
+        self.gat = YacGAT(node_in, edge_in, hidden, n_heads) # Uses YacGAT
         self.yac_head = nn.Sequential(
-            nn.Linear(hidden, 64), nn.ReLU(), nn.Linear(64, 1)
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1)
         )
     def forward(self, n, ei, ef, bp):
         h, weights = self.gat(n, ei, ef, bp)
         h_graph = h.mean(dim=0).unsqueeze(0).float()
         return self.yac_head(h_graph)
-
+    
 # ============================================================================
 # 2. Configuration & Loading
 # ============================================================================

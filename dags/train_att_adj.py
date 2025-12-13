@@ -72,7 +72,7 @@ LEARNING_RATE = 0.001
 BATCH_SIZE = 32
 
 # --- TIME-BASED TRAINING CONFIGURATION ---
-MAX_TRAIN_TIME_MINUTES = 60  # Stop training after approx 60 minutes
+MAX_TRAIN_TIME_MINUTES = 8  # Stop training after approx 60 minutes
 # -----------------------------------------
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

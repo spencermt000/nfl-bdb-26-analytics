@@ -1,18 +1,18 @@
-# Start from the official Airflow image
-FROM apache/airflow:2.7.3
+# Use the Python 3.10 version of Airflow (REQUIRED for pandas 2.1.4)
+FROM apache/airflow:2.7.3-python3.10
 
-# Switch to root to install system dependencies (if needed)
+# 1. Switch to root to install compiler tools
 USER root
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Switch back to the airflow user to install Python packages
+# 2. Switch back to airflow user
 USER airflow
 
-# Copy requirements file to the container
-COPY requirements.txt .
+# 3. Copy requirements with correct ownership
+COPY --chown=airflow:root requirements.txt /opt/airflow/requirements.txt
 
-# Install Python dependencies (including matplotlib)
-RUN pip install --no-cache-dir -r requirements.txt
+# 4. Install dependencies
+RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt

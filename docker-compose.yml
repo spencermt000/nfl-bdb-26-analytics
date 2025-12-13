@@ -21,6 +21,7 @@ x-airflow-common:
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./data:/opt/airflow/data
+    - ./model_outputs:/opt/airflow/model_outputs
     - ./outputs:/opt/airflow/outputs
     - .:/opt/airflow/project
     - ./requirements.txt:/requirements.txt

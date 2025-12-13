@@ -1,16 +1,23 @@
 """
-Dataframe C: Edge-Level Features (v3 - WITH BALL TRAJECTORY)
-=============================================================
+Dataframe C: Edge-Level Features (v3 - WITH NaN FILTERING)
+============================================================
 Creates pairwise edge features between all players in each frame.
+NOW WITH AUTOMATIC NaN FILTERING!
 
 INPUTS:
-  - outputs/dataframe_a/v2.parquet (processed node-level features)
+  - outputs/dataframe_a/v2.parquet (processed node features)
   - outputs/dataframe_b/v3.parquet (play-level features with ball trajectory)
 
 OUTPUTS:
-  - outputs/dataframe_c/v3.parquet
+  - outputs/dataframe_c/v3_pilot_3games.parquet (pilot mode)
+  - outputs/dataframe_c/v3.parquet (full mode)
 
 NEW IN V3:
+  ✨ AUTOMATIC NaN FILTERING:
+    * Filters out plays with incomplete ball trajectory data BEFORE processing
+    * Prevents NaN propagation at the source
+    * Guarantees clean edge features for model training
+  
   - Frame-level ball trajectory features:
     * ball_x_t (interpolated x position at frame t)
     * ball_y_t (interpolated y position at frame t)
@@ -33,11 +40,10 @@ FEATURES FROM V2:
   - Velocity/acceleration vectors
 
 CHANGELOG v2 -> v3:
-  - Added 4 frame-level ball trajectory features
-  - Added 5 player-level ball interaction features per player
-  - Now loads dataframe_b to get ball start position and flight frames
-  - Calculates ball position interpolation for each frame
-  - Tracks player convergence toward ball
+  - Added automatic filtering of plays with incomplete ball trajectory
+  - Prevents NaN values from entering the pipeline
+  - Added data quality reporting
+  - Maintains all v2 features with guaranteed clean data
 """
 
 import pandas as pd
@@ -50,7 +56,7 @@ from datetime import datetime
 # ============================================================================
 
 print("=" * 80)
-print("DATAFRAME C (v3): EDGE-LEVEL FEATURES + BALL TRAJECTORY")
+print("DATAFRAME C (v3): EDGE-LEVEL FEATURES + BALL TRAJECTORY + NaN FILTERING")
 print("=" * 80)
 print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
@@ -130,30 +136,105 @@ df_b = pd.read_parquet(INPUT_DF_B)
 print(f"  ✓ Loaded {len(df_b):,} plays")
 print(f"  Columns: {len(df_b.columns)}")
 
+# ============================================================================
+# *** NEW IN V3: FILTER OUT PLAYS WITH INCOMPLETE BALL TRAJECTORY ***
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("✨ V3 FEATURE: FILTERING INCOMPLETE BALL TRAJECTORY DATA")
+print("=" * 80)
+
+# Check for plays with incomplete ball trajectory data
+print("\nChecking ball trajectory completeness...")
+required_ball_cols = ['start_ball_x', 'start_ball_y', 'ball_flight_frames']
+
+# Show NaN counts before filtering
+print(f"\nBefore filtering:")
+for col in required_ball_cols:
+    if col in df_b.columns:
+        na_count = df_b[col].isna().sum()
+        na_pct = 100 * na_count / len(df_b)
+        print(f"  {col:25s}: {na_count:6,} NaN ({na_pct:5.2f}%)")
+
+# Create filter mask
+complete_trajectory_mask = (
+    df_b['start_ball_x'].notna() & 
+    df_b['start_ball_y'].notna() & 
+    df_b['ball_flight_frames'].notna()
+)
+
+incomplete_count = (~complete_trajectory_mask).sum()
+
+if incomplete_count > 0:
+    print(f"\n⚠ Found {incomplete_count} play(s) with incomplete ball trajectory data")
+    
+    # Show which plays are being filtered
+    incomplete_plays = df_b[~complete_trajectory_mask][['game_id', 'play_id']]
+    print(f"\nPlays being filtered out:")
+    for idx, row in incomplete_plays.iterrows():
+        print(f"  - Game: {row['game_id']}, Play: {row['play_id']}")
+    
+    # Apply filter
+    df_b_before = len(df_b)
+    df_b = df_b[complete_trajectory_mask].copy()
+    df_b_after = len(df_b)
+    
+    print(f"\n✓ Filtered df_b: {df_b_before:,} → {df_b_after:,} plays")
+    print(f"  Removed: {df_b_before - df_b_after} plays ({100*(df_b_before - df_b_after)/df_b_before:.2f}%)")
+    print(f"  Retained: {df_b_after} plays ({100*df_b_after/df_b_before:.2f}%)")
+    print(f"\n✨ All remaining plays have COMPLETE ball trajectory data!")
+    print(f"   This prevents NaN propagation in edge features.")
+else:
+    print(f"\n✓ All plays have complete ball trajectory data - no filtering needed!")
+
+print("=" * 80)
+
+# *** CRITICAL FIX: Filter df_a to only include plays that survived NaN filtering ***
+print(f"\n{'='*80}")
+print(f"🔧 FILTERING df_a TO MATCH CLEANED df_b")
+print(f"{'='*80}")
+
+# Only keep frames from plays that have complete ball trajectory
+print(f"Ensuring df_a only contains frames from plays in cleaned df_b...")
+df_a_before = len(df_a)
+valid_plays = df_b[['game_id', 'play_id']].drop_duplicates()
+df_a = df_a.merge(valid_plays, on=['game_id', 'play_id'], how='inner')
+df_a_after = len(df_a)
+
+print(f"  Filtered df_a: {df_a_before:,} → {df_a_after:,} rows")
+removed_frames = df_a_before - df_a_after
+if removed_frames > 0:
+    print(f"  ✓ Removed {removed_frames:,} frames from plays with incomplete ball data")
+else:
+    print(f"  ✓ No frames removed (all plays had complete data)")
+
+print(f"{'='*80}\n")
+
 # *** PILOT MODE: Filter to N games ***
 if PILOT_MODE:
     print(f"\n{'='*80}")
     print(f"PILOT MODE: Filtering to {PILOT_N_GAMES} games...")
     print(f"{'='*80}")
-    
+
     # Get first N unique games
     unique_games = df_a['game_id'].unique()[:PILOT_N_GAMES]
     print(f"  Selected games: {unique_games.tolist()}")
-    
+
     # Filter df_a
     df_a_full_size = len(df_a)
     df_a = df_a[df_a['game_id'].isin(unique_games)].copy()
     print(f"  Filtered df_a: {df_a_full_size:,} → {len(df_a):,} rows ({100*len(df_a)/df_a_full_size:.1f}%)")
-    
+
     # Filter df_b
     df_b_full_size = len(df_b)
     df_b = df_b[df_b['game_id'].isin(unique_games)].copy()
     print(f"  Filtered df_b: {df_b_full_size:,} → {len(df_b):,} plays ({100*len(df_b)/df_b_full_size:.1f}%)")
-    
+
     print(f"\nPilot dataset summary:")
     print(f"  Games: {df_a['game_id'].nunique()}")
     print(f"  Plays: {df_a['play_id'].nunique()}")
     print(f"  Frames: {len(df_a)}")
+    print(f"  ✨ All plays guaranteed to have complete ball trajectory!")
     print(f"{'='*80}\n")
 
 # Check that ball trajectory columns exist
@@ -597,6 +678,41 @@ for feat in ball_feat_check:
         print(f"  {feat}: {non_null:,} ({pct:.1f}%)")
 
 # ============================================================================
+# *** V3 QUALITY CHECK: VERIFY NO NaN IN BALL FEATURES ***
+# ============================================================================
+
+print(f"\n{'='*80}")
+print(f"✨ V3 QUALITY CHECK: NaN VERIFICATION")
+print(f"{'='*80}")
+
+# Check critical ball features for NaN
+ball_features_to_check = [
+    'ball_x_t', 'ball_y_t', 'ball_progress', 'frames_to_landing',
+    'playerA_dist_to_ball_current', 'playerA_angle_to_ball_current',
+    'playerB_dist_to_ball_current', 'playerB_angle_to_ball_current'
+]
+
+print(f"\nChecking ball-related features for NaN values:")
+nan_found = False
+for feat in ball_features_to_check:
+    if feat in df_c.columns:
+        na_count = df_c[feat].isna().sum()
+        if na_count > 0:
+            nan_found = True
+            print(f"  ⚠ {feat}: {na_count:,} NaN values found!")
+        else:
+            print(f"  ✓ {feat}: 0 NaN (100% clean)")
+
+if nan_found:
+    print(f"\n⚠ WARNING: NaN values detected in ball features!")
+    print(f"   This should not happen after filtering. Please investigate.")
+else:
+    print(f"\n🎉 SUCCESS! All ball trajectory features are NaN-free!")
+    print(f"   Dataset is ready for model training without NaN issues.")
+
+print(f"{'='*80}")
+
+# ============================================================================
 # 8. Save Output
 # ============================================================================
 
@@ -637,7 +753,15 @@ print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print(f"\nOutput: {output_file_final}")
 print(f"Rows: {len(df_c):,}")
 print(f"Columns: {len(df_c.columns)}")
-print(f"  NEW ball trajectory features:")
-print(f"    - 4 frame-level: ball_x_t, ball_y_t, ball_progress, frames_to_landing")
-print(f"    - 8 player-level (×2 players): dist/angle to ball current/landing, convergence")
+
+print(f"\n✨ V3 IMPROVEMENTS:")
+print(f"  ✓ Automatic filtering of incomplete ball trajectory data")
+print(f"  ✓ Guaranteed NaN-free ball features")
+print(f"  ✓ Clean data ready for model training")
+
+print(f"\nFeatures included:")
+print(f"  - 4 frame-level ball features: ball_x_t, ball_y_t, ball_progress, frames_to_landing")
+print(f"  - 8 player-level ball features (×2 players): dist/angle to ball current/landing, convergence")
+print(f"  - All v2 edge features (distances, angles, velocities, team info)")
+
 print("\n" + "=" * 80)

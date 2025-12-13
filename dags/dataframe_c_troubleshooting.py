@@ -1,43 +1,25 @@
 """
-Dataframe C: Edge-Level Features (v3 - WITH BALL TRAJECTORY)
-=============================================================
-Creates pairwise edge features between all players in each frame.
+Dataframe C: TROUBLESHOOTING SCRIPT
+====================================
+Diagnoses issues with edge-level features and ball trajectory data.
+
+This script is based on dataframe_c_v2.py but adds extensive diagnostics
+to identify where and why NaN values are being created.
 
 INPUTS:
   - outputs/dataframe_a/v2.parquet (processed node-level features)
   - outputs/dataframe_b/v3.parquet (play-level features with ball trajectory)
 
 OUTPUTS:
-  - outputs/dataframe_c/v3.parquet
+  - Diagnostic reports and visualizations
+  - Identification of problematic plays/frames
+  - Analysis of NaN sources
 
-NEW IN V3:
-  - Frame-level ball trajectory features:
-    * ball_x_t (interpolated x position at frame t)
-    * ball_y_t (interpolated y position at frame t)
-    * ball_progress (0 to 1, how far along trajectory)
-    * frames_to_landing (remaining frames)
-  
-  - Player-level ball features (for each player in each frame):
-    * player_dist_to_ball_current (distance to ball at frame t)
-    * player_dist_to_ball_landing (distance to landing spot)
-    * player_angle_to_ball_current (relative to player's dir)
-    * player_angle_to_ball_landing (relative to player's dir)
-    * player_ball_convergence (is distance to ball decreasing?)
-
-FEATURES FROM V2:
-  - Pairwise distances (x, y, euclidean)
-  - Relative angles (orientation, direction)
-  - Same team indicator
-  - Player attributes for both nodes
-  - Coverage data (if available)
-  - Velocity/acceleration vectors
-
-CHANGELOG v2 -> v3:
-  - Added 4 frame-level ball trajectory features
-  - Added 5 player-level ball interaction features per player
-  - Now loads dataframe_b to get ball start position and flight frames
-  - Calculates ball position interpolation for each frame
-  - Tracks player convergence toward ball
+TROUBLESHOOTING FOCUS:
+  - Why do some frames have NaN ball trajectory data?
+  - Which plays/frames are affected?
+  - What's different about frames with complete vs incomplete data?
+  - Are these frames pre-throw, during flight, or post-catch?
 """
 
 import pandas as pd
@@ -50,32 +32,31 @@ from datetime import datetime
 # ============================================================================
 
 print("=" * 80)
-print("DATAFRAME C (v3): EDGE-LEVEL FEATURES + BALL TRAJECTORY")
+print("DATAFRAME C: TROUBLESHOOTING SCRIPT")
 print("=" * 80)
 print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
+print("🔍 This script will diagnose issues with ball trajectory data and NaN values")
+print("=" * 80)
+
 # File paths
 INPUT_DF_A = 'outputs/dataframe_a/v2.parquet'
-INPUT_DF_B = 'outputs/dataframe_b/v3.parquet'  # NEW: for ball trajectory
-OUTPUT_DIR = 'outputs/dataframe_c'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v3.parquet')
+INPUT_DF_B = 'outputs/dataframe_b/v3.parquet'
+OUTPUT_DIR = 'outputs/dataframe_c/troubleshooting'
 
-# *** PILOT MODE ***
-PILOT_MODE = True  # Set to True to process only 3 games for testing
-PILOT_N_GAMES = 3  # Number of games to process in pilot mode
-
-# Processing settings
-CHUNK_SIZE = 1000  # Process 1000 frames at a time
+# *** PILOT MODE (Always use for troubleshooting) ***
+PILOT_MODE = True
+PILOT_N_GAMES = 3
 
 # Create output directory
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-if PILOT_MODE:
-    print("\n" + "⚠" * 40)
-    print("PILOT MODE ENABLED".center(80))
-    print(f"Will process only {PILOT_N_GAMES} games for testing".center(80))
-    print("Set PILOT_MODE = False for full processing".center(80))
-    print("⚠" * 40 + "\n")
+print(f"\n📊 TROUBLESHOOTING MODE")
+print(f"   - Will analyze {PILOT_N_GAMES} games in detail")
+print(f"   - Will identify all sources of NaN values")
+print(f"   - Will provide recommendations for fixes")
+print(f"   - Output directory: {OUTPUT_DIR}")
+print("=" * 80)
 
 # ============================================================================
 # Helper Functions
@@ -166,6 +147,48 @@ else:
     print(f"  ✓ Ball trajectory columns present")
 
 # ============================================================================
+# DIAGNOSTIC 1: Analyze Ball Trajectory Completeness in df_b
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("🔍 DIAGNOSTIC 1: BALL TRAJECTORY DATA COMPLETENESS (df_b)")
+print("=" * 80)
+
+print("\nChecking for NaN values in df_b ball trajectory columns:")
+for col in required_ball_cols:
+    if col in df_b.columns:
+        na_count = df_b[col].isna().sum()
+        na_pct = 100 * na_count / len(df_b)
+        print(f"  {col:25s}: {na_count:6,} NaN ({na_pct:5.1f}%)")
+
+# Check for plays with incomplete data
+print("\nPlays with complete vs incomplete ball trajectory data:")
+complete_mask = (
+    df_b['start_ball_x'].notna() & 
+    df_b['start_ball_y'].notna() & 
+    df_b['ball_flight_frames'].notna()
+)
+complete_count = complete_mask.sum()
+incomplete_count = (~complete_mask).sum()
+
+print(f"  Complete:   {complete_count:6,} plays ({100*complete_count/len(df_b):5.1f}%)")
+print(f"  Incomplete: {incomplete_count:6,} plays ({100*incomplete_count/len(df_b):5.1f}%)")
+
+if incomplete_count > 0:
+    print(f"\n⚠ WARNING: {incomplete_count} plays have incomplete ball trajectory data!")
+    print(f"  These plays will produce NaN values in edge features")
+    
+    # Sample incomplete plays
+    incomplete_plays = df_b[~complete_mask][['game_id', 'play_id', 'start_ball_x', 'start_ball_y', 'ball_flight_frames']].head(10)
+    print(f"\nSample incomplete plays:")
+    print(incomplete_plays.to_string())
+    
+    # Save full list
+    incomplete_file = os.path.join(OUTPUT_DIR, 'incomplete_plays.csv')
+    df_b[~complete_mask][['game_id', 'play_id', 'start_ball_x', 'start_ball_y', 'ball_flight_frames']].to_csv(incomplete_file, index=False)
+    print(f"\n  💾 Saved all incomplete plays to: {incomplete_file}")
+
+# ============================================================================
 # 2. Merge Ball Trajectory Info with Frame Data
 # ============================================================================
 
@@ -187,6 +210,53 @@ print(f"  ✓ Merged: {len(df_a):,} rows (same: {len(df_a) == initial_len})")
 if 'start_ball_x' in df_a.columns:
     merged_count = df_a['start_ball_x'].notna().sum()
     print(f"  Frames with ball trajectory data: {merged_count:,} ({100*merged_count/len(df_a):.1f}%)")
+
+# ============================================================================
+# DIAGNOSTIC 2: Analyze Merge Results
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("🔍 DIAGNOSTIC 2: BALL TRAJECTORY DATA AFTER MERGE (df_a)")
+print("=" * 80)
+
+print("\nNaN counts in merged ball trajectory columns:")
+for col in ['start_ball_x', 'start_ball_y', 'ball_flight_frames']:
+    if col in df_a.columns:
+        na_count = df_a[col].isna().sum()
+        na_pct = 100 * na_count / len(df_a)
+        print(f"  {col:25s}: {na_count:8,} NaN ({na_pct:5.1f}%)")
+
+# Analyze frames with incomplete data
+print("\nFrames by data completeness:")
+frames_complete = (
+    df_a['start_ball_x'].notna() & 
+    df_a['start_ball_y'].notna() & 
+    df_a['ball_flight_frames'].notna()
+)
+complete_frame_count = frames_complete.sum()
+incomplete_frame_count = (~frames_complete).sum()
+
+print(f"  Complete:   {complete_frame_count:8,} frames ({100*complete_frame_count/len(df_a):5.1f}%)")
+print(f"  Incomplete: {incomplete_frame_count:8,} frames ({100*incomplete_frame_count/len(df_a):5.1f}%)")
+
+if incomplete_frame_count > 0:
+    print(f"\n⚠ ISSUE IDENTIFIED: {incomplete_frame_count} frames missing ball trajectory data")
+    
+    # Group by play to see which plays are affected
+    incomplete_frames = df_a[~frames_complete]
+    plays_affected = incomplete_frames.groupby(['game_id', 'play_id']).size().reset_index(name='frame_count')
+    plays_affected = plays_affected.sort_values('frame_count', ascending=False)
+    
+    print(f"\n  Affected plays: {len(plays_affected)} plays")
+    print(f"  Total frames affected: {incomplete_frame_count:,}")
+    
+    print(f"\n  Top 10 plays by affected frame count:")
+    print(plays_affected.head(10).to_string(index=False))
+    
+    # Save details
+    incomplete_frames_file = os.path.join(OUTPUT_DIR, 'incomplete_frames.csv')
+    incomplete_frames[['game_id', 'play_id', 'frame_id', 'nfl_id', 'start_ball_x', 'start_ball_y', 'ball_flight_frames']].to_csv(incomplete_frames_file, index=False)
+    print(f"\n  💾 Saved incomplete frames to: {incomplete_frames_file}")
 
 # ============================================================================
 # 3. Calculate Frame-Level Ball Positions
@@ -245,6 +315,34 @@ if valid_count > 0:
     print(f"  ✓ Ball positions calculated")
     print(f"  Avg ball progress: {df_a.loc[valid_mask, 'ball_progress'].mean():.3f}")
     print(f"  Avg frames to landing: {df_a.loc[valid_mask, 'frames_to_landing'].mean():.1f}")
+else:
+    print(f"  ⚠ WARNING: No valid frames for ball position calculation!")
+
+# ============================================================================
+# DIAGNOSTIC 3: Analyze Ball Position Interpolation Results
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("🔍 DIAGNOSTIC 3: BALL POSITION INTERPOLATION RESULTS")
+print("=" * 80)
+
+print("\nNaN counts in calculated ball position columns:")
+for col in ['ball_x_t', 'ball_y_t', 'ball_progress', 'frames_to_landing']:
+    na_count = df_a[col].isna().sum()
+    na_pct = 100 * na_count / len(df_a)
+    print(f"  {col:25s}: {na_count:8,} NaN ({na_pct:5.1f}%)")
+
+# Check if NaN frames match the incomplete trajectory frames
+print("\nComparison: Expected vs Actual NaN frames")
+expected_nan = (~frames_complete).sum()
+actual_nan = df_a['ball_x_t'].isna().sum()
+print(f"  Expected NaN frames (no trajectory data): {expected_nan:8,}")
+print(f"  Actual NaN frames (ball_x_t):            {actual_nan:8,}")
+print(f"  Match: {expected_nan == actual_nan}")
+
+if expected_nan != actual_nan:
+    print(f"\n  ⚠ WARNING: Mismatch between expected and actual NaN counts!")
+    print(f"     There may be additional issues beyond missing trajectory data")
 
 # ============================================================================
 # 4. Calculate Player-Level Ball Features
@@ -328,6 +426,42 @@ converging = (df_a['player_ball_convergence'] == 1).sum()
 diverging = (df_a['player_ball_convergence'] == -1).sum()
 print(f"  Converging: {converging:,} ({100*converging/len(df_a):.1f}%)")
 print(f"  Diverging: {diverging:,} ({100*diverging/len(df_a):.1f}%)")
+
+# ============================================================================
+# DIAGNOSTIC 4: Analyze Player-Level Ball Features
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("🔍 DIAGNOSTIC 4: PLAYER-LEVEL BALL FEATURES")
+print("=" * 80)
+
+print("\nNaN counts in player-level ball features:")
+player_ball_features = [
+    'player_dist_to_ball_current',
+    'player_dist_to_ball_landing', 
+    'player_angle_to_ball_current',
+    'player_angle_to_ball_landing',
+    'player_ball_convergence'
+]
+
+for col in player_ball_features:
+    if col in df_a.columns:
+        na_count = df_a[col].isna().sum()
+        na_pct = 100 * na_count / len(df_a)
+        print(f"  {col:35s}: {na_count:8,} NaN ({na_pct:5.1f}%)")
+
+# Critical check: Are NaNs propagating correctly?
+print("\n🔍 NaN Propagation Check:")
+print(f"  ball_x_t NaN count:                      {df_a['ball_x_t'].isna().sum():8,}")
+print(f"  player_dist_to_ball_current NaN count:  {df_a['player_dist_to_ball_current'].isna().sum():8,}")
+print(f"  player_angle_to_ball_current NaN count: {df_a['player_angle_to_ball_current'].isna().sum():8,}")
+
+# These should all match!
+if (df_a['ball_x_t'].isna().sum() == df_a['player_dist_to_ball_current'].isna().sum() == 
+    df_a['player_angle_to_ball_current'].isna().sum()):
+    print(f"  ✓ NaN counts match - propagation is consistent")
+else:
+    print(f"  ⚠ WARNING: NaN counts don't match - unexpected behavior!")
 
 # ============================================================================
 # 5. Create Edge Features (SAME AS V2 + Ball Features)
@@ -597,47 +731,243 @@ for feat in ball_feat_check:
         print(f"  {feat}: {non_null:,} ({pct:.1f}%)")
 
 # ============================================================================
-# 8. Save Output
+# DIAGNOSTIC 5: Final Edge-Level NaN Analysis
 # ============================================================================
 
 print("\n" + "=" * 80)
-print("STEP 8: SAVING OUTPUT")
+print("🔍 DIAGNOSTIC 5: COMPREHENSIVE NaN ANALYSIS IN EDGES")
+print("=" * 80)
+
+# Analyze all columns for NaN
+print("\nComplete NaN analysis for all edge features:")
+print(f"{'Column':<40} {'NaN Count':>12} {'NaN %':>8} {'Non-Null Count':>15}")
 print("-" * 80)
 
-# Adjust output filename for pilot mode
-if PILOT_MODE:
-    output_file_final = OUTPUT_FILE.replace('v3.parquet', f'v3_pilot_{PILOT_N_GAMES}games.parquet')
-    print(f"PILOT MODE: Saving to pilot filename...")
-else:
-    output_file_final = OUTPUT_FILE
+nan_summary = []
+for col in df_c.columns:
+    na_count = df_c[col].isna().sum()
+    na_pct = 100 * na_count / len(df_c)
+    non_null = len(df_c) - na_count
+    print(f"{col:<40} {na_count:>12,} {na_pct:>7.1f}% {non_null:>15,}")
+    
+    if na_count > 0:
+        nan_summary.append({
+            'column': col,
+            'nan_count': na_count,
+            'nan_pct': na_pct
+        })
 
-print("Writing to parquet...")
-df_c.to_parquet(output_file_final, engine='pyarrow', index=False, compression='snappy')
-print(f"✓ Saved to: {output_file_final}")
-print(f"  File size: {os.path.getsize(output_file_final) / 1024 / 1024:.1f} MB")
+# Identify frames with NaN values
+print("\n" + "=" * 80)
+print("🔍 IDENTIFYING PROBLEMATIC FRAMES")
+print("=" * 80)
 
-print("\nSample output (first 2 rows):")
-print(df_c.head(2).to_string())
+# Check ball_progress as indicator of missing ball data
+if 'ball_progress' in df_c.columns:
+    nan_edges = df_c[df_c['ball_progress'].isna()]
+    
+    print(f"\nEdges with NaN ball_progress: {len(nan_edges):,} ({100*len(nan_edges)/len(df_c):.1f}%)")
+    
+    if len(nan_edges) > 0:
+        # Group by frame to see which frames are affected
+        nan_by_frame = nan_edges.groupby(['game_id', 'play_id', 'frame_id']).size().reset_index(name='nan_edge_count')
+        nan_by_frame = nan_by_frame.sort_values('nan_edge_count', ascending=False)
+        
+        print(f"\nFrames with NaN edges: {len(nan_by_frame):,}")
+        print(f"Total NaN edges: {len(nan_edges):,}")
+        print(f"\nTop 20 frames by NaN edge count:")
+        print(nan_by_frame.head(20).to_string(index=False))
+        
+        # Save to CSV
+        nan_frames_file = os.path.join(OUTPUT_DIR, 'nan_edge_frames.csv')
+        nan_by_frame.to_csv(nan_frames_file, index=False)
+        print(f"\n💾 Saved all NaN frames to: {nan_frames_file}")
+        
+        # Sample some actual edges with NaN
+        print(f"\nSample edges with NaN values (first 10):")
+        sample_cols = ['game_id', 'play_id', 'frame_id', 'edge_id', 'ball_progress', 
+                      'playerA_dist_to_ball_current', 'playerB_dist_to_ball_current']
+        print(nan_edges[sample_cols].head(10).to_string(index=False))
+        
+        # Check if these are specific graph sizes
+        print(f"\n🔍 Analyzing graph structure of NaN frames:")
+        nan_graph_sizes = nan_edges.groupby(['game_id', 'play_id', 'frame_id']).agg({
+            'playerA_id': 'nunique',
+            'edge_id': 'count'
+        }).rename(columns={'playerA_id': 'num_nodes', 'edge_id': 'num_edges'})
+        
+        print(f"\nGraph size distribution for NaN frames:")
+        size_dist = nan_graph_sizes.groupby(['num_nodes', 'num_edges']).size().reset_index(name='frame_count')
+        size_dist = size_dist.sort_values('frame_count', ascending=False)
+        print(size_dist.head(10).to_string(index=False))
+        
+        # THE KEY QUESTION: Are these 11-node graphs?
+        eleven_node_frames = nan_graph_sizes[nan_graph_sizes['num_nodes'] == 11]
+        if len(eleven_node_frames) > 0:
+            print(f"\n⚠ CRITICAL FINDING: {len(eleven_node_frames)} frames have 11 nodes AND NaN values!")
+            print(f"   This matches the pattern we saw in training (11 nodes, 110 edges)")
+            print(f"   These are likely specific play configurations or phases")
 
 # ============================================================================
-# Complete
+# DIAGNOSTIC 6: Cross-Reference with df_b
 # ============================================================================
 
 print("\n" + "=" * 80)
-if PILOT_MODE:
-    print("DATAFRAME C (v3): COMPLETE [PILOT MODE]")
-    print("=" * 80)
-    print(f"⚠ Processed {PILOT_N_GAMES} games only")
-    print(f"⚠ Set PILOT_MODE = False for full processing")
-else:
-    print("DATAFRAME C (v3): COMPLETE")
-    print("=" * 80)
+print("🔍 DIAGNOSTIC 6: CROSS-REFERENCE WITH SOURCE DATA (df_b)")
+print("=" * 80)
 
-print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print(f"\nOutput: {output_file_final}")
-print(f"Rows: {len(df_c):,}")
-print(f"Columns: {len(df_c.columns)}")
-print(f"  NEW ball trajectory features:")
-print(f"    - 4 frame-level: ball_x_t, ball_y_t, ball_progress, frames_to_landing")
-print(f"    - 8 player-level (×2 players): dist/angle to ball current/landing, convergence")
+# For each NaN frame, check what the original df_b data looked like
+if len(nan_edges) > 0:
+    nan_plays = nan_edges[['game_id', 'play_id']].drop_duplicates()
+    print(f"\nPlays with NaN edges: {len(nan_plays)}")
+    
+    # Merge with df_b to see original data
+    nan_plays_detail = nan_plays.merge(
+        df_b[['game_id', 'play_id', 'start_ball_x', 'start_ball_y', 'ball_flight_frames', 
+              'ball_land_x', 'ball_land_y']],
+        on=['game_id', 'play_id'],
+        how='left'
+    )
+    
+    print(f"\nBall trajectory data for plays with NaN edges:")
+    print(nan_plays_detail.head(20).to_string(index=False))
+    
+    # Check if start position is missing
+    missing_start = nan_plays_detail['start_ball_x'].isna().sum()
+    missing_land = nan_plays_detail['ball_land_x'].isna().sum()
+    missing_frames = nan_plays_detail['ball_flight_frames'].isna().sum()
+    
+    print(f"\nMissing data in plays with NaN edges:")
+    print(f"  Missing start_ball_x:      {missing_start:6,} plays")
+    print(f"  Missing ball_land_x:       {missing_land:6,} plays")
+    print(f"  Missing ball_flight_frames: {missing_frames:6,} plays")
+    
+    # Save detailed report
+    nan_plays_file = os.path.join(OUTPUT_DIR, 'nan_plays_detail.csv')
+    nan_plays_detail.to_csv(nan_plays_file, index=False)
+    print(f"\n💾 Saved play details to: {nan_plays_file}")
+
+# ============================================================================
+# DIAGNOSTIC 7: ROOT CAUSE ANALYSIS & RECOMMENDATIONS
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("🎯 DIAGNOSTIC 7: ROOT CAUSE ANALYSIS & RECOMMENDATIONS")
+print("=" * 80)
+
+print("\n" + "=" * 80)
+print("SUMMARY OF FINDINGS")
+print("=" * 80)
+
+# Calculate key metrics
+total_edges = len(df_c)
+nan_edges_count = df_c['ball_progress'].isna().sum() if 'ball_progress' in df_c.columns else 0
+nan_pct = 100 * nan_edges_count / total_edges if total_edges > 0 else 0
+
+print(f"\n📊 Overall Statistics:")
+print(f"  Total edges created:           {total_edges:>10,}")
+print(f"  Edges with NaN ball features:  {nan_edges_count:>10,} ({nan_pct:.1f}%)")
+print(f"  Clean edges (no NaN):          {total_edges - nan_edges_count:>10,} ({100-nan_pct:.1f}%)")
+
+# Root causes
+print(f"\n🔍 Root Cause Analysis:")
+print(f"  1. Some plays in df_b are missing ball trajectory data")
+print(f"     - start_ball_x, start_ball_y, or ball_flight_frames is NaN")
+print(f"     - This prevents ball position interpolation")
+print(f"  ")
+print(f"  2. When trajectory data is missing for a play:")
+print(f"     - ALL frames in that play get NaN for ball_x_t, ball_y_t")
+print(f"     - ALL edges in those frames inherit the NaN")
+print(f"     - This cascades to ALL ball-related features")
+print(f"  ")
+print(f"  3. The NaN values persist through normalization")
+print(f"     - Training dataset sees these as NaN inputs")
+print(f"     - Model processes NaN → produces NaN output")
+print(f"     - BCE loss rejects NaN values → training fails")
+
+print(f"\n💡 RECOMMENDATIONS:")
+print(f"")
+print(f"  OPTION 1: Fix Source Data (df_b)")
+print(f"  ----------------------------------------")
+print(f"  • Investigate why some plays lack ball trajectory data")
+print(f"  • Check if these are data quality issues or expected")
+print(f"  • If fixable: Update dataframe_b creation to fill missing values")
+print(f"  ")
+print(f"  OPTION 2: Filter Incomplete Plays (Recommended)")
+print(f"  ----------------------------------------")
+print(f"  • Remove plays with incomplete ball trajectory from df_b")
+print(f"  • This prevents NaN propagation at the source")
+print(f"  • Add filter in dataframe_c creation:")
+print(f"    df_b = df_b[df_b['start_ball_x'].notna() & ")
+print(f"                df_b['start_ball_y'].notna() & ")
+print(f"                df_b['ball_flight_frames'].notna()]")
+print(f"  ")
+print(f"  OPTION 3: Handle NaN in Dataset Loader")
+print(f"  ----------------------------------------")
+print(f"  • Filter edges with NaN during PyTorch dataset creation")
+print(f"  • Skip problematic frames entirely")
+print(f"  • Less efficient but works around the issue")
+print(f"  ")
+print(f"  OPTION 4: Impute Missing Ball Data")
+print(f"  ----------------------------------------")
+print(f"  • Fill missing start positions with QB position at snap")
+print(f"  • Estimate flight frames from throw distance")
+print(f"  • More complex but preserves all data")
+
+# Save comprehensive report
+print("\n" + "=" * 80)
+print("SAVING DIAGNOSTIC REPORT")
+print("=" * 80)
+
+report_file = os.path.join(OUTPUT_DIR, 'diagnostic_report.txt')
+with open(report_file, 'w') as f:
+    f.write("=" * 80 + "\n")
+    f.write("DATAFRAME C TROUBLESHOOTING REPORT\n")
+    f.write("=" * 80 + "\n")
+    f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"Games analyzed: {PILOT_N_GAMES}\n")
+    f.write("\n")
+    
+    f.write("SUMMARY\n")
+    f.write("-" * 80 + "\n")
+    f.write(f"Total edges:           {total_edges:,}\n")
+    f.write(f"Edges with NaN:        {nan_edges_count:,} ({nan_pct:.1f}%)\n")
+    f.write(f"Clean edges:           {total_edges - nan_edges_count:,} ({100-nan_pct:.1f}%)\n")
+    f.write("\n")
+    
+    f.write("NaN COUNTS BY FEATURE\n")
+    f.write("-" * 80 + "\n")
+    for item in nan_summary:
+        f.write(f"{item['column']:<40} {item['nan_count']:>10,} ({item['nan_pct']:>6.1f}%)\n")
+    f.write("\n")
+    
+    f.write("ROOT CAUSE\n")
+    f.write("-" * 80 + "\n")
+    f.write("Missing ball trajectory data in source (df_b) propagates to all edges\n")
+    f.write("in affected frames, creating NaN values that break model training.\n")
+    f.write("\n")
+    
+    f.write("RECOMMENDATION\n")
+    f.write("-" * 80 + "\n")
+    f.write("Filter incomplete plays at the source (df_b level) to prevent NaN propagation.\n")
+
+print(f"💾 Saved diagnostic report to: {report_file}")
+
+print("\n" + "=" * 80)
+print("TROUBLESHOOTING COMPLETE!")
+print("=" * 80)
+print(f"\nAll diagnostic files saved to: {OUTPUT_DIR}/")
+print(f"\n📋 Files created:")
+print(f"  - diagnostic_report.txt      (Summary report)")
+print(f"  - incomplete_plays.csv       (Plays missing trajectory data)")
+print(f"  - incomplete_frames.csv      (Frames missing trajectory data)")
+print(f"  - nan_edge_frames.csv        (Frames with NaN edges)")
+print(f"  - nan_plays_detail.csv       (Detailed play information)")
+
+print(f"\n🎯 Next Steps:")
+print(f"  1. Review diagnostic files to understand the pattern")
+print(f"  2. Decide on fix strategy (see recommendations above)")
+print(f"  3. Implement fix in appropriate script (df_b or df_c)")
+print(f"  4. Re-run pipeline and verify NaN elimination")
+
 print("\n" + "=" * 80)

@@ -1,0 +1,284 @@
+"""
+viz_play_test.py - Visualize Attention & Predictions (Dynamic Game Detection)
+=============================================================================
+"""
+
+import pandas as pd
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import os
+import sys
+import pickle
+
+# Append scripts path for utils
+sys.path.append('scripts')
+# If utils fails, we define simple loader
+def load_parquet(path):
+    return pd.read_parquet(path)
+
+# ============================================================================
+# 1. Model Definitions (Must match Training Scripts)
+# ============================================================================
+
+# --- COMPLETION MODEL ARCHITECTURE ---
+class MultiHeadGraphAttention(nn.Module):
+    def __init__(self, node_in_dim, edge_in_dim, hidden_dim, n_heads=4):
+        super().__init__()
+        self.n_heads = n_heads
+        self.head_dim = hidden_dim // n_heads
+        
+        self.node_encoder = nn.Sequential(
+            nn.Linear(node_in_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
+        )
+        self.edge_encoder = nn.Sequential(
+            nn.Linear(edge_in_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
+        )
+        self.W_Q = nn.Linear(hidden_dim, hidden_dim)
+        self.W_K = nn.Linear(hidden_dim, hidden_dim)
+        self.W_V = nn.Linear(hidden_dim, hidden_dim)
+        self.edge_attn = nn.Linear(hidden_dim, n_heads)
+        self.out_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+    def forward(self, node_feat, edge_index, edge_feat, ball_progress):
+        N = node_feat.shape[0]
+        h = self.node_encoder(node_feat)
+        e = self.edge_encoder(edge_feat)
+        
+        Q = self.W_Q(h).view(N, self.n_heads, self.head_dim)
+        K = self.W_K(h).view(N, self.n_heads, self.head_dim)
+        V = self.W_V(h).view(N, self.n_heads, self.head_dim)
+        
+        src, dst = edge_index
+        scores = (Q[src] * K[dst]).sum(dim=-1) / (self.head_dim ** 0.5)
+        scores = scores + self.edge_attn(e)
+        
+        attn_weights = torch.zeros_like(scores)
+        for i in range(N):
+            mask = (src == i)
+            if mask.any():
+                attn_weights[mask] = F.softmax(scores[mask], dim=0)
+        
+        weighted_V = V[src] * attn_weights.unsqueeze(-1)
+        out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
+        out.index_add_(0, dst, weighted_V)
+        out = self.out_proj(out.view(N, -1))
+        
+        return out + h, attn_weights
+
+class AttentionAdjacencyModel(nn.Module):
+    def __init__(self, node_in, edge_in, hidden, n_heads):
+        super().__init__()
+        self.attention = MultiHeadGraphAttention(node_in, edge_in, hidden, n_heads)
+        self.completion_head = nn.Sequential(
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1), nn.Sigmoid()
+        )
+        self.epa_head = nn.Sequential(
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1)
+        )
+    def forward(self, n, ei, ef, bp):
+        h, weights = self.attention(n, ei, ef, bp)
+        h_graph = h.mean(dim=0).unsqueeze(0).float()
+        return self.completion_head(h_graph), weights
+
+
+# --- YAC MODEL ARCHITECTURE (Specific) ---
+class YacGAT(nn.Module):
+    def __init__(self, node_in_dim, edge_in_dim, hidden_dim, n_heads=4):
+        super().__init__()
+        self.n_heads = n_heads
+        self.head_dim = hidden_dim // n_heads
+        
+        self.node_encoder = nn.Linear(node_in_dim, hidden_dim)
+        self.edge_encoder = nn.Linear(edge_in_dim, hidden_dim)
+        
+        self.W_Q = nn.Linear(hidden_dim, hidden_dim)
+        self.W_K = nn.Linear(hidden_dim, hidden_dim)
+        self.W_V = nn.Linear(hidden_dim, hidden_dim)
+        self.edge_attn = nn.Linear(hidden_dim, n_heads)
+        self.out_proj = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, node_feat, edge_index, edge_feat, ball_progress):
+        N = node_feat.shape[0]
+        h = F.relu(self.node_encoder(node_feat))
+        e = F.relu(self.edge_encoder(edge_feat))
+        
+        Q = self.W_Q(h).view(N, self.n_heads, self.head_dim)
+        K = self.W_K(h).view(N, self.n_heads, self.head_dim)
+        V = self.W_V(h).view(N, self.n_heads, self.head_dim)
+        
+        src, dst = edge_index
+        scores = (Q[src] * K[dst]).sum(dim=-1) / (self.head_dim ** 0.5)
+        scores = scores + self.edge_attn(e)
+        
+        attn_weights = torch.zeros_like(scores)
+        for i in range(N):
+            mask = (src == i)
+            if mask.any():
+                attn_weights[mask] = F.softmax(scores[mask], dim=0)
+                
+        weighted_V = V[src] * attn_weights.unsqueeze(-1)
+        out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
+        out.index_add_(0, dst, weighted_V)
+        out = self.out_proj(out.view(N, -1))
+        return out + h, attn_weights
+
+class YacPredictionModel(nn.Module):
+    def __init__(self, node_in, edge_in, hidden, n_heads):
+        super().__init__()
+        self.gat = YacGAT(node_in, edge_in, hidden, n_heads)
+        self.yac_head = nn.Sequential(
+            nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1)
+        )
+    def forward(self, n, ei, ef, bp):
+        h, weights = self.gat(n, ei, ef, bp)
+        h_graph = h.mean(dim=0).unsqueeze(0).float()
+        return self.yac_head(h_graph)
+
+# ============================================================================
+# 2. Configuration & Loading
+# ============================================================================
+
+print("="*80)
+print("VISUALIZING PLAY WITH GNN ATTENTION")
+print("="*80)
+
+DEVICE = torch.device('cpu') 
+
+# Load Feature Stats
+with open('model_outputs/attention/feature_stats.pkl', 'rb') as f:
+    stats = pickle.load(f)
+
+# Load DataFrames
+print("Loading data...")
+df_a = load_parquet('outputs/dataframe_a/v1.parquet')
+df_c = load_parquet('outputs/dataframe_c/v1_pilot_3games_old.parquet') # The Pilot Edges
+df_b = load_parquet('outputs/dataframe_b/v1.parquet')
+
+# --- FIX: DYNAMICALLY DETECT AVAILABLE GAMES ---
+available_games = df_c['game_id'].unique()
+print(f"Found {len(available_games)} games in pilot dataset: {available_games}")
+
+# Ensure Type Consistency (Convert everything to string for filtering)
+df_a['game_id'] = df_a['game_id'].astype(str)
+df_b['game_id'] = df_b['game_id'].astype(str)
+df_c['game_id'] = df_c['game_id'].astype(str)
+available_games_str = [str(g) for g in available_games]
+
+# Filter df_a and df_b to these games
+df_a = df_a[df_a['game_id'].isin(available_games_str)]
+df_b = df_b[df_b['game_id'].isin(available_games_str)]
+
+print(f"Filtered Data: {len(df_a)} frames, {len(df_b)} plays.")
+
+if len(df_b) == 0:
+    print("CRITICAL ERROR: No matching plays found in df_b for the pilot games.")
+    print("Check if df_b/v1.parquet actually contains data for these game IDs.")
+    sys.exit()
+
+# Load Models
+print("Loading models...")
+comp_model = AttentionAdjacencyModel(
+    len(stats['node_features']), len(stats['edge_features']), 128, 4
+)
+comp_checkpoint = torch.load('model_outputs/attention/best_model.pth', map_location=DEVICE)
+comp_model.load_state_dict(comp_checkpoint['model_state_dict'])
+comp_model.eval()
+
+yac_model = YacPredictionModel(
+    len(stats['node_features']), len(stats['edge_features']), 128, 4
+)
+yac_checkpoint = torch.load('model_outputs/attention_yac/yac_model.pth', map_location=DEVICE)
+yac_model.load_state_dict(yac_checkpoint)
+yac_model.eval()
+
+# ============================================================================
+# 3. Select a Play
+# ============================================================================
+
+# Pick one random play from the filtered df_b
+selected_play = df_b.sample(1).iloc[0]
+GAME_ID = str(selected_play['game_id'])
+PLAY_ID = int(selected_play['play_id'])
+
+print(f"\nSELECTED PLAY: Game {GAME_ID}, Play {PLAY_ID}")
+description = selected_play.get('playDescription', 'N/A')
+print(f"Description: {description}")
+
+# Get frames for this play
+play_frames = df_a[
+    (df_a['game_id'] == GAME_ID) & (df_a['play_id'] == PLAY_ID)
+]['frame_id'].unique()
+play_frames.sort()
+
+print(f"Visualizing {len(play_frames)} frames...")
+
+# ============================================================================
+# 4. Visualization Loop
+# ============================================================================
+
+fig, ax = plt.subplots(figsize=(12, 7))
+
+def update(frame_idx):
+    ax.clear()
+    
+    # 1. Setup Field
+    ax.set_xlim(0, 120)
+    ax.set_ylim(0, 53.3)
+    ax.set_facecolor('#f0f0f0') 
+    for x in range(10, 111, 10):
+        ax.axvline(x, color='white', linestyle='-', alpha=0.5)
+    
+    frame_id = play_frames[frame_idx]
+    
+    # 2. Get Data for Frame
+    nodes = df_a[
+        (df_a['game_id'] == GAME_ID) & 
+        (df_a['play_id'] == PLAY_ID) & 
+        (df_a['frame_id'] == frame_id)
+    ].copy()
+    
+    valid_nfl_ids = set(nodes['nfl_id'].values)
+    
+    edges_raw = df_c[
+        (df_c['game_id'] == GAME_ID) & 
+        (df_c['play_id'] == PLAY_ID) & 
+        (df_c['frame_id'] == frame_id)
+    ]
+    edges = edges_raw[
+        edges_raw['playerA_id'].isin(valid_nfl_ids) & 
+        edges_raw['playerB_id'].isin(valid_nfl_ids)
+    ].copy()
+    
+    if len(nodes) == 0: return
+
+    # 3. Prepare Tensors
+    node_feat = torch.FloatTensor(
+        (nodes[stats['node_features']].values - stats['node_means'].values) / (stats['node_stds'].values + 1e-8)
+    )
+    edge_feat = torch.FloatTensor(
+        (edges[stats['edge_features']].values - stats['edge_means'].values) / (stats['edge_stds'].values + 1e-8)
+    )
+    
+    node_id_to_idx = {nid: i for i, nid in enumerate(nodes['nfl_id'].values)}
+    edge_index = []
+    for _, row in edges.iterrows():
+        edge_index.append([node_id_to_idx[row['playerA_id']], node_id_to_idx[row['playerB_id']]])
+    
+    edge_index = torch.LongTensor(edge_index)
+    if edge_index.ndim == 1 or edge_index.shape[0] != 2:
+        edge_index = edge_index.t()
+        
+    ball_progress = torch.FloatTensor([edges.iloc[0]['ball_progress']]) if not edges.empty else torch.zeros(1)
+
+    # 4. Run Models
+    if edge_index.shape[0] == 2 and edge_index.shape[1] > 0:
+        with torch.no_grad():
+            comp_prob, attn_weights = comp_model(node_feat, edge_index, edge_feat, ball_progress)
+            yac_pred = yac_model(node_feat, edge_index, edge_feat, ball_progress)
+        
+        # Draw Edges
+        attn_avg = attn_weights.mean(dim=1).numpy()

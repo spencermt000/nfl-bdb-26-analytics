@@ -284,16 +284,27 @@ def update(frame_idx):
             comp_prob, attn_weights = comp_model(node_feat, edge_index, edge_feat, ball_progress)
             yac_pred = yac_model(node_feat, edge_index, edge_feat, ball_progress)
         
-        # Draw Edges
+        # Draw Edges - Only for Targeted Receiver
+        # Find the targeted receiver node index
+        targeted_receiver_idx = None
+        if 'player_role' in nodes.columns:
+            targeted_mask = nodes['player_role'] == 'Targeted Receiver'
+            if targeted_mask.any():
+                targeted_receiver_idx = nodes[targeted_mask].index[0]
+                # Get position in the node list (not DataFrame index)
+                targeted_receiver_pos = list(nodes.index).index(targeted_receiver_idx)
+
         attn_avg = attn_weights.mean(dim=1).numpy()
         for i, (src, dst) in enumerate(edge_index.t().numpy()):
             score = attn_avg[i]
-            if score > 0.10: # Only draw strong connections
-                p1 = nodes.iloc[src]
-                p2 = nodes.iloc[dst]
-                alpha = min(score * 3, 1.0)
-                ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']], 
-                       color='blue', alpha=alpha, linewidth=1.5, zorder=1)
+            # Only draw edges connected to the targeted receiver
+            if score > 0.10 and targeted_receiver_pos is not None:
+                if src == targeted_receiver_pos or dst == targeted_receiver_pos:
+                    p1 = nodes.iloc[src]
+                    p2 = nodes.iloc[dst]
+                    alpha = min(score * 3, 1.0)
+                    ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']],
+                           color='blue', alpha=alpha, linewidth=1.5, zorder=1)
 
         # Info Box
         info_text = (
@@ -303,63 +314,32 @@ def update(frame_idx):
         )
     else:
         info_text = "No edges (Pre-snap?)"
-
-    # 5. Plot Nodes - Color by Position, Label by Role
+        
+    # 5. Plot Nodes - Color by Role, Label by NFL ID
     # ------------------------------------------------------------------
-    # Position color mapping
-    position_colors = {
-        'QB': '#FF6B6B',      # Red
-        'RB': '#4ECDC4',      # Teal
-        'WR': '#FFE66D',      # Yellow
-        'TE': '#95E1D3',      # Mint
-        'OL': '#F38181',      # Light Red
-        'T': '#F38181',       # Tackle
-        'G': '#F38181',       # Guard
-        'C': '#F38181',       # Center
-        'DL': '#AA96DA',      # Purple
-        'DE': '#AA96DA',      # Defensive End
-        'DT': '#AA96DA',      # Defensive Tackle
-        'NT': '#AA96DA',      # Nose Tackle
-        'LB': '#5F9EA0',      # Cadet Blue
-        'ILB': '#5F9EA0',     # Inside LB
-        'MLB': '#5F9EA0',     # Middle LB
-        'OLB': '#5F9EA0',     # Outside LB
-        'DB': '#87CEEB',      # Sky Blue
-        'CB': '#87CEEB',      # Cornerback
-        'FS': '#6495ED',      # Free Safety
-        'SS': '#6495ED',      # Strong Safety
-        'S': '#6495ED',       # Safety
-        'K': '#DDA15E',       # Kicker - Bronze
-        'P': '#BC6C25',       # Punter - Brown
+    # Role color mapping (actual values in player_role column)
+    role_colors = {
+        'Passer': '#FF6B6B',                  # Red
+        'Targeted Receiver': '#00FF00',       # Bright Green
+        'Other Route Runner': '#FFE66D',      # Yellow
+        'Defensive Coverage': '#87CEEB',      # Sky Blue
     }
-    
-    # Map colors based on player_position
-    if 'player_position' in nodes.columns:
-        colors = nodes['player_position'].map(position_colors).fillna('grey')
+
+    # Map colors based on player_role
+    if 'player_role' in nodes.columns:
+        # FIX: Convert to object (string) type immediately to avoid Categorical errors
+        colors = nodes['player_role'].map(role_colors).astype(object).fillna('grey')
+        
         # Handle football
         if 'displayName' in nodes.columns:
             mask_football = nodes['displayName'] == 'football'
-            colors[mask_football] = 'brown'
+            # Ensure we can write to this location
+            colors.loc[mask_football] = 'brown'
     else:
         colors = 'grey'
 
     # Plot with bigger markers
     ax.scatter(nodes['x'], nodes['y'], c=colors, s=250, zorder=2, edgecolors='white', linewidths=2)
-    
-    # Label Nodes with player_role
-    role_col = 'player_role' if 'player_role' in nodes.columns else None
-    
-    for _, row in nodes.iterrows():
-        if role_col and pd.notna(row[role_col]):
-            # Use player_role as label
-            label = str(row[role_col])
-            ax.text(row['x'], row['y']+1.8, label, 
-                   fontsize=8, ha='center', fontweight='bold', 
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8, edgecolor='none'))
-        elif pd.notna(row['nfl_id']):
-            # Fallback to nfl_id
-            ax.text(row['x'], row['y']+1.8, str(int(row['nfl_id']))[-2:], 
-                   fontsize=8, ha='center', fontweight='bold')
 
     # 6. Draw ball ending spot as red square
     if ball_end_x is not None and ball_end_y is not None and pd.notna(ball_end_x) and pd.notna(ball_end_y):

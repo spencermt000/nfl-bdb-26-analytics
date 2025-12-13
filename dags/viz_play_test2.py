@@ -314,7 +314,7 @@ def update(frame_idx):
         )
     else:
         info_text = "No edges (Pre-snap?)"
-        
+
     # 5. Plot Nodes - Color by Role, Label by NFL ID
     # ------------------------------------------------------------------
     # Role color mapping (actual values in player_role column)
@@ -353,7 +353,7 @@ def update(frame_idx):
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes, 
            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
     
-    ax.set_title(f"Play {PLAY_ID} | {description[:50]}...")
+    ax.set_title(f"Play {PLAY_ID} | Game {GAME_ID}")
 
 ani = animation.FuncAnimation(fig, update, frames=len(play_frames), interval=200)
 

@@ -61,10 +61,10 @@ print("=" * 80)
 print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 # File paths
-INPUT_DF_A = 'outputs/dataframe_a/v2.parquet'
-INPUT_DF_B = 'outputs/dataframe_b/v3.parquet'  # NEW: for ball trajectory
+INPUT_DF_A = 'outputs/dataframe_a/v1.parquet'
+INPUT_DF_B = 'outputs/dataframe_b/v1.parquet'  # NEW: for ball trajectory
 OUTPUT_DIR = 'outputs/dataframe_c'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v3.parquet')
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v1.parquet')
 
 # *** PILOT MODE ***
 PILOT_MODE = True  # Set to True to process only 3 games for testing
@@ -722,7 +722,7 @@ print("-" * 80)
 
 # Adjust output filename for pilot mode
 if PILOT_MODE:
-    output_file_final = OUTPUT_FILE.replace('v3.parquet', f'v3_pilot_{PILOT_N_GAMES}games.parquet')
+    output_file_final = OUTPUT_FILE.replace('v1.parquet', f'v1_pilot_{PILOT_N_GAMES}games.parquet')
     print(f"PILOT MODE: Saving to pilot filename...")
 else:
     output_file_final = OUTPUT_FILE

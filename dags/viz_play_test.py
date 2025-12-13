@@ -1,13 +1,6 @@
 """
-viz_play_test.py - Visualize Attention & Predictions for a Single Play
-======================================================================
-Generates an animated GIF of a specific play, visualizing:
-1. Player positions (Nodes)
-2. Attention Weights (Edges) - The "Brain" of the GNN
-3. Live Predictions (Completion Probability & YAC EPA)
-
-OUTPUT:
-  - play_viz.gif
+viz_play_test.py - Visualize Attention & Predictions (Dynamic Game Detection)
+=============================================================================
 """
 
 import pandas as pd
@@ -17,15 +10,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.patches import Rectangle
 import os
 import sys
+import pickle
 
 # Append scripts path for utils
 sys.path.append('scripts')
-from utils import load_parquet_to_df
+# If utils fails, we define simple loader
+def load_parquet(path):
+    return pd.read_parquet(path)
+
 # ============================================================================
-# 1. Model Definitions
+# 1. Model Definitions (Must match Training Scripts)
 # ============================================================================
 
 # --- COMPLETION MODEL ARCHITECTURE ---
@@ -35,7 +31,6 @@ class MultiHeadGraphAttention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = hidden_dim // n_heads
         
-        # Completion model used Sequential encoders
         self.node_encoder = nn.Sequential(
             nn.Linear(node_in_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
         )
@@ -97,7 +92,6 @@ class YacGAT(nn.Module):
         self.n_heads = n_heads
         self.head_dim = hidden_dim // n_heads
         
-        # YAC model used simple Linear encoders (Architecture Mismatch Fix)
         self.node_encoder = nn.Linear(node_in_dim, hidden_dim)
         self.edge_encoder = nn.Linear(edge_in_dim, hidden_dim)
         
@@ -109,7 +103,6 @@ class YacGAT(nn.Module):
 
     def forward(self, node_feat, edge_index, edge_feat, ball_progress):
         N = node_feat.shape[0]
-        # YAC model applied ReLU in forward pass
         h = F.relu(self.node_encoder(node_feat))
         e = F.relu(self.edge_encoder(edge_feat))
         
@@ -136,7 +129,7 @@ class YacGAT(nn.Module):
 class YacPredictionModel(nn.Module):
     def __init__(self, node_in, edge_in, hidden, n_heads):
         super().__init__()
-        self.gat = YacGAT(node_in, edge_in, hidden, n_heads) # Uses YacGAT
+        self.gat = YacGAT(node_in, edge_in, hidden, n_heads)
         self.yac_head = nn.Sequential(
             nn.Linear(hidden, 64), nn.ReLU(), nn.Dropout(0.2), nn.Linear(64, 1)
         )
@@ -144,7 +137,7 @@ class YacPredictionModel(nn.Module):
         h, weights = self.gat(n, ei, ef, bp)
         h_graph = h.mean(dim=0).unsqueeze(0).float()
         return self.yac_head(h_graph)
-    
+
 # ============================================================================
 # 2. Configuration & Loading
 # ============================================================================
@@ -153,23 +146,38 @@ print("="*80)
 print("VISUALIZING PLAY WITH GNN ATTENTION")
 print("="*80)
 
-DEVICE = torch.device('cpu') # Visualization is usually fast enough on CPU
-PILOT_GAMES = ['2022091100', '2022091101', '2022091102'] # Adjust if needed
+DEVICE = torch.device('cpu') 
 
-# Load Feature Stats (Needed for Normalization)
-import pickle
+# Load Feature Stats
 with open('model_outputs/attention/feature_stats.pkl', 'rb') as f:
     stats = pickle.load(f)
 
 # Load DataFrames
 print("Loading data...")
-df_a = pd.read_parquet('outputs/dataframe_a/v2.parquet')
-df_c = pd.read_parquet('outputs/dataframe_c/v3_pilot_3games.parquet')
-df_b = pd.read_parquet('outputs/dataframe_b/v4.parquet')
+df_a = load_parquet('outputs/dataframe_a/v2.parquet')
+df_c = load_parquet('outputs/dataframe_c/v3_pilot_3games.parquet') # The Pilot Edges
+df_b = load_parquet('outputs/dataframe_b/v4.parquet')
 
-# Filter to pilot
-df_a = df_a[df_a['game_id'].isin(PILOT_GAMES)]
-df_c = df_c[df_c['game_id'].isin(PILOT_GAMES)]
+# --- FIX: DYNAMICALLY DETECT AVAILABLE GAMES ---
+available_games = df_c['game_id'].unique()
+print(f"Found {len(available_games)} games in pilot dataset: {available_games}")
+
+# Ensure Type Consistency (Convert everything to string for filtering)
+df_a['game_id'] = df_a['game_id'].astype(str)
+df_b['game_id'] = df_b['game_id'].astype(str)
+df_c['game_id'] = df_c['game_id'].astype(str)
+available_games_str = [str(g) for g in available_games]
+
+# Filter df_a and df_b to these games
+df_a = df_a[df_a['game_id'].isin(available_games_str)]
+df_b = df_b[df_b['game_id'].isin(available_games_str)]
+
+print(f"Filtered Data: {len(df_a)} frames, {len(df_b)} plays.")
+
+if len(df_b) == 0:
+    print("CRITICAL ERROR: No matching plays found in df_b for the pilot games.")
+    print("Check if df_b/v4.parquet actually contains data for these game IDs.")
+    sys.exit()
 
 # Load Models
 print("Loading models...")
@@ -191,25 +199,22 @@ yac_model.eval()
 # 3. Select a Play
 # ============================================================================
 
-# Filter to valid plays in df_b (plays that exist in Pilot)
-valid_plays = df_b[df_b['game_id'].isin(PILOT_GAMES)]
-if len(valid_plays) == 0:
-    print("Error: No plays found in pilot games!")
-    sys.exit()
-
-# Pick one random play
-selected_play = valid_plays.sample(1).iloc[0]
+# Pick one random play from the filtered df_b
+selected_play = df_b.sample(1).iloc[0]
 GAME_ID = str(selected_play['game_id'])
 PLAY_ID = int(selected_play['play_id'])
 
 print(f"\nSELECTED PLAY: Game {GAME_ID}, Play {PLAY_ID}")
-print(f"Description: {selected_play.get('playDescription', 'N/A')}")
+description = selected_play.get('playDescription', 'N/A')
+print(f"Description: {description}")
 
 # Get frames for this play
 play_frames = df_a[
     (df_a['game_id'] == GAME_ID) & (df_a['play_id'] == PLAY_ID)
 ]['frame_id'].unique()
 play_frames.sort()
+
+print(f"Visualizing {len(play_frames)} frames...")
 
 # ============================================================================
 # 4. Visualization Loop
@@ -223,8 +228,7 @@ def update(frame_idx):
     # 1. Setup Field
     ax.set_xlim(0, 120)
     ax.set_ylim(0, 53.3)
-    ax.set_facecolor('#f0f0f0') # Light gray turf
-    # Draw yard lines
+    ax.set_facecolor('#f0f0f0') 
     for x in range(10, 111, 10):
         ax.axvline(x, color='white', linestyle='-', alpha=0.5)
     
@@ -237,8 +241,8 @@ def update(frame_idx):
         (df_a['frame_id'] == frame_id)
     ].copy()
     
-    # Filter Edges (The fix we applied earlier)
     valid_nfl_ids = set(nodes['nfl_id'].values)
+    
     edges_raw = df_c[
         (df_c['game_id'] == GAME_ID) & 
         (df_c['play_id'] == PLAY_ID) & 
@@ -271,61 +275,48 @@ def update(frame_idx):
     ball_progress = torch.FloatTensor([edges.iloc[0]['ball_progress']]) if not edges.empty else torch.zeros(1)
 
     # 4. Run Models
-    with torch.no_grad():
-        # Get Completion Pred + Attention Weights
-        comp_prob, attn_weights = comp_model(node_feat, edge_index, edge_feat, ball_progress)
+    if edge_index.shape[0] == 2 and edge_index.shape[1] > 0:
+        with torch.no_grad():
+            comp_prob, attn_weights = comp_model(node_feat, edge_index, edge_feat, ball_progress)
+            yac_pred = yac_model(node_feat, edge_index, edge_feat, ball_progress)
         
-        # Get YAC Pred
-        yac_pred = yac_model(node_feat, edge_index, edge_feat, ball_progress)
-    
-    # Process Attention Weights
-    # Average across heads: [E, n_heads] -> [E]
-    attn_avg = attn_weights.mean(dim=1).numpy()
-    
-    # 5. Plot Edges (The "Brain")
-    # Only draw edges with meaningful attention (> 0.05) to reduce clutter
-    for i, (src, dst) in enumerate(edge_index.t().numpy()):
-        score = attn_avg[i]
-        if score > 0.05: # Threshold
-            p1 = nodes.iloc[src]
-            p2 = nodes.iloc[dst]
-            
-            # Opacity based on score
-            alpha = min(score * 3, 1.0) # Scale up visibility
-            ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']], 
-                   color='blue', alpha=alpha, linewidth=1.5, zorder=1)
-            
-            # Label Edge (Optional - can get messy)
-            if score > 0.2:
-                mid_x = (p1['x'] + p2['x']) / 2
-                mid_y = (p1['y'] + p2['y']) / 2
-                ax.text(mid_x, mid_y, f"{score:.2f}", fontsize=6, color='darkblue')
+        # Draw Edges
+        attn_avg = attn_weights.mean(dim=1).numpy()
+        for i, (src, dst) in enumerate(edge_index.t().numpy()):
+            score = attn_avg[i]
+            if score > 0.10: # Only draw strong connections
+                p1 = nodes.iloc[src]
+                p2 = nodes.iloc[dst]
+                alpha = min(score * 3, 1.0)
+                ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']], 
+                       color='blue', alpha=alpha, linewidth=1.5, zorder=1)
 
-    # 6. Plot Nodes
-    # Color mapping
+        # Info Box
+        info_text = (
+            f"Frame: {frame_id}\n"
+            f"Completion %: {comp_prob.item()*100:.1f}%\n"
+            f"Exp YAC EPA: {yac_pred.item():.2f}"
+        )
+    else:
+        info_text = "No edges (Pre-snap?)"
+
+    # 5. Plot Nodes
     colors = nodes['team'].map({'home': 'red', 'away': 'blue', 'football': 'brown'}).fillna('grey')
     ax.scatter(nodes['x'], nodes['y'], c=colors, s=100, zorder=2, edgecolors='white')
     
-    # Label Nodes (nflId)
+    # Label Nodes
     for _, row in nodes.iterrows():
-        ax.text(row['x'], row['y']+1, str(int(row['nfl_id']))[-3:], 
-               fontsize=7, ha='center', fontweight='bold')
+        if pd.notna(row['nfl_id']):
+             ax.text(row['x'], row['y']+1, str(int(row['nfl_id']))[-2:], 
+                   fontsize=6, ha='center', fontweight='bold')
 
-    # 7. Info Box (Predictions)
-    info_text = (
-        f"Frame: {frame_id}\n"
-        f"Pred Completion: {comp_prob.item()*100:.1f}%\n"
-        f"Pred YAC EPA: {yac_pred.item():.2f}"
-    )
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes, 
            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
     
-    ax.set_title(f"Play {PLAY_ID} - Graph Attention Visualization")
+    ax.set_title(f"Play {PLAY_ID} | {description[:50]}...")
 
-print(f"Generating animation for {len(play_frames)} frames...")
 ani = animation.FuncAnimation(fig, update, frames=len(play_frames), interval=200)
 
 save_path = 'play_viz.gif'
 ani.save(save_path, writer='pillow', fps=5)
 print(f"✓ Saved visualization to: {save_path}")
-print("You can download this file from the container to view it.")

@@ -301,7 +301,30 @@ def update(frame_idx):
         info_text = "No edges (Pre-snap?)"
 
     # 5. Plot Nodes
-    colors = nodes['team'].map({'home': 'red', 'away': 'blue', 'football': 'brown'}).fillna('grey')
+    # 5. Plot Nodes
+    # ------------------------------------------------------------------
+    # ROBUST COLUMN CHECK: 'team' vs 'club'
+    team_col = 'team' if 'team' in nodes.columns else 'club'
+    
+    if team_col in nodes.columns:
+        # Map colors based on the found column
+        colors = nodes[team_col].map({
+            'home': 'red', 
+            'away': 'blue', 
+            'football': 'brown',
+            'LA': 'blue', # Example team abbr
+            'BUF': 'red'  # Example team abbr
+        }).fillna('grey')
+        
+        # Fallback: if mapping failed (grey), try checking if it's the football
+        # often 'club' column has 'football' as value
+        if 'displayName' in nodes.columns:
+             mask_football = nodes['displayName'] == 'football'
+             colors[mask_football] = 'brown'
+    else:
+        # If neither column exists, default to black
+        colors = 'black'
+
     ax.scatter(nodes['x'], nodes['y'], c=colors, s=100, zorder=2, edgecolors='white')
     
     # Label Nodes

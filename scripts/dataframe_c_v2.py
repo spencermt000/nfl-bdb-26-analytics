@@ -6,10 +6,13 @@ Creates STRUCTURED pairwise edges between players with:
   - Time-varying distance thresholds (decay as ball approaches landing)
   - Attention priors (P_ij) based on football domain knowledge
   - Temporal edge continuity tracking (edge_id)
+  - Coverage scheme probability distributions (11 columns)
 
 INPUTS:
   - outputs/dataframe_a/v1.parquet (processed node features)
+    * Provides: ball_land_x, ball_land_y, coverage_scheme, coverage probabilities
   - outputs/dataframe_b/v1.parquet (play-level features with ball trajectory)
+    * Provides: start_ball_x, start_ball_y, ball_flight_frames
 
 OUTPUTS:
   - outputs/dataframe_c/v2.parquet (structured edges)
@@ -21,6 +24,7 @@ KEY DIFFERENCES FROM V1:
   ✨ TIME-VARYING THRESHOLDS: Distance filtering adapts based on ball progress
   ✨ ATTENTION PRIORS: P_ij values (0-1) inform model which edges are critical
   ✨ TEMPORAL CONTINUITY: edge_id tracks same relationship across frames
+  ✨ COVERAGE CONTEXT: 11 coverage columns (scheme + 10 probability distributions)
 
 EDGE TYPE TAXONOMY:
   - qb_rr: QB → non-targeted route runner (IGNORED)
@@ -42,6 +46,19 @@ EDGE CREATION LOGIC (TIERED):
   
   Tier 3 (IGNORED for computational efficiency):
     - rr_rr, rr_trr, qb_rr: Not created
+
+COVERAGE SCHEME COLUMNS (11 total):
+  - coverage_scheme: Primary coverage type (categorical)
+  - coverage_scheme__COVER_0: Probability of Cover 0
+  - coverage_scheme__COVER_1: Probability of Cover 1
+  - coverage_scheme__COVER_2: Probability of Cover 2
+  - coverage_scheme__COVER_3: Probability of Cover 3
+  - coverage_scheme__COVER_4: Probability of Cover 4
+  - coverage_scheme__COVER_6: Probability of Cover 6
+  - coverage_scheme__PREVENT: Probability of Prevent
+  - coverage_scheme__GOAL_LINE: Probability of Goal Line
+  - coverage_scheme__MISC: Probability of Misc coverage
+  - coverage_scheme__SHORT: Probability of Short coverage
 """
 
 import pandas as pd
@@ -380,12 +397,14 @@ for idx, frame_row in unique_frames.iterrows():
     
     play_info = play_data.iloc[0]
     
-    # Ball trajectory info
+    # Ball trajectory info from df_b
     start_ball_x = play_info['start_ball_x']
     start_ball_y = play_info['start_ball_y']
-    ball_land_x = play_info['ball_land_x']
-    ball_land_y = play_info['ball_land_y']
     total_frames = play_info['ball_flight_frames']
+    
+    # Ball landing coordinates from df_a (should be same for all players in frame)
+    ball_land_x = players.iloc[0]['ball_land_x']
+    ball_land_y = players.iloc[0]['ball_land_y']
     
     # Interpolate ball position at this frame
     ball_x_t, ball_y_t = interpolate_ball_position(
@@ -620,8 +639,19 @@ for idx, frame_row in unique_frames.iterrows():
                 row['playerA_targeted'] = player_a.get('targeted_defender', 0)
                 row['playerB_targeted'] = player_b.get('targeted_defender', 0)
             
+            # Add coverage scheme and probability distributions
             if 'coverage_scheme' in player_a.index:
                 row['coverage_scheme'] = player_a['coverage_scheme']
+            
+            # Add coverage scheme probability columns (10 columns)
+            coverage_prob_cols = [
+                'COVER_0', 'COVER_1', 'COVER_2', 'COVER_3', 'COVER_4', 
+                'COVER_6', 'PREVENT', 'GOAL_LINE', 'MISC', 'SHORT'
+            ]
+            for prob_col in coverage_prob_cols:
+                full_col_name = f'coverage_scheme__{prob_col}'
+                if full_col_name in player_a.index:
+                    row[full_col_name] = player_a[full_col_name]
             
             output_rows.append(row)
             

@@ -6,13 +6,10 @@ Creates STRUCTURED pairwise edges between players with:
   - Time-varying distance thresholds (decay as ball approaches landing)
   - Attention priors (P_ij) based on football domain knowledge
   - Temporal edge continuity tracking (edge_id)
-  - Coverage scheme probability distributions (11 columns)
 
 INPUTS:
   - outputs/dataframe_a/v1.parquet (processed node features)
-    * Provides: ball_land_x, ball_land_y, coverage_scheme, coverage probabilities
   - outputs/dataframe_b/v1.parquet (play-level features with ball trajectory)
-    * Provides: start_ball_x, start_ball_y, ball_flight_frames
 
 OUTPUTS:
   - outputs/dataframe_c/v2.parquet (structured edges)
@@ -24,7 +21,6 @@ KEY DIFFERENCES FROM V1:
   ✨ TIME-VARYING THRESHOLDS: Distance filtering adapts based on ball progress
   ✨ ATTENTION PRIORS: P_ij values (0-1) inform model which edges are critical
   ✨ TEMPORAL CONTINUITY: edge_id tracks same relationship across frames
-  ✨ COVERAGE CONTEXT: 11 coverage columns (scheme + 10 probability distributions)
 
 EDGE TYPE TAXONOMY:
   - qb_rr: QB → non-targeted route runner (IGNORED)
@@ -46,19 +42,6 @@ EDGE CREATION LOGIC (TIERED):
   
   Tier 3 (IGNORED for computational efficiency):
     - rr_rr, rr_trr, qb_rr: Not created
-
-COVERAGE SCHEME COLUMNS (11 total):
-  - coverage_scheme: Primary coverage type (categorical)
-  - coverage_scheme__COVER_0: Probability of Cover 0
-  - coverage_scheme__COVER_1: Probability of Cover 1
-  - coverage_scheme__COVER_2: Probability of Cover 2
-  - coverage_scheme__COVER_3: Probability of Cover 3
-  - coverage_scheme__COVER_4: Probability of Cover 4
-  - coverage_scheme__COVER_6: Probability of Cover 6
-  - coverage_scheme__PREVENT: Probability of Prevent
-  - coverage_scheme__GOAL_LINE: Probability of Goal Line
-  - coverage_scheme__MISC: Probability of Misc coverage
-  - coverage_scheme__SHORT: Probability of Short coverage
 """
 
 import pandas as pd
@@ -111,6 +94,37 @@ BASE_PRIORS = {
     'def_def': 0.85,     # Defender coordination
     # Note: qb_rr, rr_trr, rr_rr are not created (low priority)
 }
+
+# === COVERAGE SCHEME ENCODING ===
+# Manual mapping for interpretability (based on actual data distribution)
+COVERAGE_SCHEME_ENCODING = {
+    'COVER 0': 0,
+    'COVER 1': 1,
+    'COVER 2': 2,
+    'COVER 2 MAN': 2.5,  # Variant of Cover 2
+    'COVER 3': 3,
+    'COVER 4': 4,
+    'COVER 6': 6,
+    'PREVENT': 7,
+    'GOAL LINE': 8,
+    'REDZONE': 9,
+    'MISC': 10,
+    'SHORT': 11,
+}
+
+def encode_coverage_scheme(scheme):
+    """
+    Convert coverage scheme string to numeric code.
+    
+    Args:
+        scheme: Coverage scheme string (e.g., 'COVER 3')
+    
+    Returns:
+        int/float: Numeric encoding, or -1 if missing/unknown
+    """
+    if pd.isna(scheme):
+        return -1  # Missing
+    return COVERAGE_SCHEME_ENCODING.get(scheme, 99)  # 99 = unmapped/unknown
 
 # Create directories
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -397,14 +411,12 @@ for idx, frame_row in unique_frames.iterrows():
     
     play_info = play_data.iloc[0]
     
-    # Ball trajectory info from df_b
+    # Ball trajectory info
     start_ball_x = play_info['start_ball_x']
     start_ball_y = play_info['start_ball_y']
+    ball_land_x = play_info['ball_land_x']
+    ball_land_y = play_info['ball_land_y']
     total_frames = play_info['ball_flight_frames']
-    
-    # Ball landing coordinates from df_a (should be same for all players in frame)
-    ball_land_x = players.iloc[0]['ball_land_x']
-    ball_land_y = players.iloc[0]['ball_land_y']
     
     # Interpolate ball position at this frame
     ball_x_t, ball_y_t = interpolate_ball_position(
@@ -639,9 +651,9 @@ for idx, frame_row in unique_frames.iterrows():
                 row['playerA_targeted'] = player_a.get('targeted_defender', 0)
                 row['playerB_targeted'] = player_b.get('targeted_defender', 0)
             
-            # Add coverage scheme and probability distributions
+            # Add coverage scheme (ENCODED as numeric for model compatibility)
             if 'coverage_scheme' in player_a.index:
-                row['coverage_scheme'] = player_a['coverage_scheme']
+                row['coverage_scheme_encoded'] = encode_coverage_scheme(player_a['coverage_scheme'])
             
             # Add coverage scheme probability columns (10 columns)
             coverage_prob_cols = [

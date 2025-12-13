@@ -154,9 +154,9 @@ with open('model_outputs/attention/feature_stats.pkl', 'rb') as f:
 
 # Load DataFrames
 print("Loading data...")
-df_a = load_parquet('outputs/dataframe_a/v2.parquet')
-df_c = load_parquet('outputs/dataframe_c/v3_pilot_3games.parquet') # The Pilot Edges
-df_b = load_parquet('outputs/dataframe_b/v4.parquet')
+df_a = load_parquet('outputs/dataframe_a/v1.parquet')
+df_c = load_parquet('outputs/dataframe_c/v1_pilot_3games.parquet') # The Pilot Edges
+df_b = load_parquet('outputs/dataframe_b/v1.parquet')
 
 # --- FIX: DYNAMICALLY DETECT AVAILABLE GAMES ---
 available_games = df_c['game_id'].unique()
@@ -176,7 +176,7 @@ print(f"Filtered Data: {len(df_a)} frames, {len(df_b)} plays.")
 
 if len(df_b) == 0:
     print("CRITICAL ERROR: No matching plays found in df_b for the pilot games.")
-    print("Check if df_b/v4.parquet actually contains data for these game IDs.")
+    print("Check if df_b/v1.parquet actually contains data for these game IDs.")
     sys.exit()
 
 # Load Models

@@ -411,12 +411,14 @@ for idx, frame_row in unique_frames.iterrows():
     
     play_info = play_data.iloc[0]
     
-    # Ball trajectory info
+    # Ball trajectory info from df_b
     start_ball_x = play_info['start_ball_x']
     start_ball_y = play_info['start_ball_y']
-    ball_land_x = play_info['ball_land_x']
-    ball_land_y = play_info['ball_land_y']
     total_frames = play_info['ball_flight_frames']
+    
+    # Ball landing coordinates from df_a (should be same for all players in frame)
+    ball_land_x = players.iloc[0]['ball_land_x']
+    ball_land_y = players.iloc[0]['ball_land_y']
     
     # Interpolate ball position at this frame
     ball_x_t, ball_y_t = interpolate_ball_position(

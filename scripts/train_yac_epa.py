@@ -11,11 +11,6 @@ INPUTS:
 
 OUTPUTS:
   - model_outputs/attention_yac/yac_model.pth (trained model)
-
-ARCHITECTURE:
-  - Multi-head graph attention (4 heads)
-  - Global Pooling
-  - Regression Head (Linear -> scalar output)
 """
 
 import pandas as pd
@@ -71,7 +66,7 @@ LEARNING_RATE = 0.001
 BATCH_SIZE = 1  # Keep 1 for variable graph sizes
 
 # --- TIME-BASED TRAINING CONFIGURATION ---
-MAX_TRAIN_TIME_MINUTES = 5
+MAX_TRAIN_TIME_MINUTES = 8
 # -----------------------------------------
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -136,15 +131,21 @@ NODE_FEATURES = [
 ]
 node_features_available = [f for f in NODE_FEATURES if f in df_a_filtered.columns]
 
-# Edge Features
+# --- UPDATED EDGE FEATURES (Matches Completion Model = 21 Features) ---
 EDGE_FEATURES = [
-    'e_dist', 'x_dist', 'y_dist', 'relative_angle_o', 'relative_angle_dir',
+    'e_dist', 'x_dist', 'y_dist', 
+    'relative_angle_o', 'relative_angle_dir',
     'playerA_dist_to_landing', 'playerB_dist_to_landing',
     'playerA_dist_to_ball_current', 'playerB_dist_to_ball_current',
+    'playerA_angle_to_ball_current', 'playerB_angle_to_ball_current', # <-- Added
+    'playerA_angle_to_ball_landing', 'playerB_angle_to_ball_landing', # <-- Added
     'playerA_ball_convergence', 'playerB_ball_convergence',
-    'relative_v_x', 'relative_v_y', 'relative_speed', 'same_team',
+    'relative_v_x', 'relative_v_y', 'relative_speed', 
+    'same_team',
     'ball_progress', 'frames_to_landing',
 ]
+# ----------------------------------------------------------------------
+
 edge_features_available = [f for f in EDGE_FEATURES if f in df_c_filtered.columns]
 
 # Statistics for normalization
@@ -204,21 +205,19 @@ class YacGraphDataset(Dataset):
             (self.df_c['frame_id'] == frame_id)
         ]
 
-        # --- FIX: Only keep edges where BOTH players are in the node list ---
+        # Only keep edges where BOTH players are in the node list
         edges = edges_raw[
             edges_raw['playerA_id'].isin(valid_nfl_ids) &
             edges_raw['playerB_id'].isin(valid_nfl_ids)
         ].copy()
-        # -------------------------------------------------------------------
 
-        # 3. Extract Features (Now guaranteed to match edge_index count)
+        # 3. Extract Features
         node_feat = torch.FloatTensor((nodes[self.node_features].values - self.node_means.values) / (self.node_stds.values + 1e-8))
         edge_feat = torch.FloatTensor((edges[self.edge_features].values - self.edge_means.values) / (self.edge_stds.values + 1e-8))
 
         # 4. Build Edge Index
         edge_index = []
         for _, row in edges.iterrows():
-            # No need to check 'if in node_id_to_idx' because we already filtered df
             src_idx = node_id_to_idx[row['playerA_id']]
             dst_idx = node_id_to_idx[row['playerB_id']]
             edge_index.append([src_idx, dst_idx])
@@ -313,31 +312,25 @@ class MultiHeadGraphAttention(nn.Module):
         # Aggregate
         weighted_V = V[src] * attn_weights.unsqueeze(-1)
         out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
-        out.index_add_(0, dst, weighted_V) # Safer aggregation
+        out.index_add_(0, dst, weighted_V)
         
         out = self.out_proj(out.view(N, -1))
-        return out + h # Residual
+        return out + h
 
 class YacPredictionModel(nn.Module):
     def __init__(self, node_in, edge_in, hidden, n_heads):
         super().__init__()
         self.gat = MultiHeadGraphAttention(node_in, edge_in, hidden, n_heads)
-        
-        # Regression Head: No Sigmoid!
         self.yac_head = nn.Sequential(
             nn.Linear(hidden, 64),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(64, 1) # Linear output for regression
+            nn.Linear(64, 1)
         )
         
     def forward(self, node, edge_idx, edge_feat, bp):
         h = self.gat(node, edge_idx, edge_feat)
-        
-        # Global pooling
         graph_emb = h.mean(dim=0).unsqueeze(0).float()
-        
-        # Predict continuous EPA value
         yac_epa = self.yac_head(graph_emb)
         return yac_epa
 
@@ -357,7 +350,7 @@ print("STEP 6: TRAINING (REGRESSION)")
 print("-" * 80)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-criterion = nn.MSELoss() # <--- Mean Squared Error for Regression
+criterion = nn.MSELoss()
 
 best_val_loss = float('inf')
 start_time = time.time()
@@ -375,23 +368,18 @@ while True:
     count = 0
     
     for batch in train_loader:
-        # Unpack
         nf = batch['node_features'][0].to(DEVICE)
         ei = batch['edge_index'][0].to(DEVICE)
         ef = batch['edge_features'][0].to(DEVICE)
         bp = batch['ball_progress'][0].to(DEVICE)
         target = batch['target'][0].to(DEVICE)
         
-        # Skip bad graphs
         if ei.numel() == 0 or ef.numel() == 0: continue
         if ei.shape[0] != 2: ei = ei.t()
         if ei.shape[0] != 2: continue
             
-        # Forward
         pred = model(nf, ei, ef, bp)
-        
-        # Loss (MSE)
-        loss = criterion(pred, target) # No clamping for regression
+        loss = criterion(pred, target)
         
         optimizer.zero_grad()
         loss.backward()

@@ -33,7 +33,7 @@ print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 # File paths
 INPUT_BDB_SUPP = 'data/supplementary_data.csv'
 INPUT_NFLFASTR = 'data/sdv_raw_pbp.parquet'
-INPUT_DF_A = 'outputs/dataframe_a/v2.parquet'
+INPUT_DF_A = 'outputs/dataframe_a/v1.parquet'
 OUTPUT_DIR = 'outputs/dataframe_b'
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v1.parquet')
 

@@ -10,7 +10,7 @@ INPUTS:
   - data/sumer_coverages_player_play.parquet (SumerSports player coverage data)
 
 OUTPUTS:
-  - outputs/dataframe_a/v2.parquet
+  - outputs/dataframe_a/v1.parquet
 
 FEATURES ADDED:
   - Standardized coordinates (x, y, dir, o, ball_land_x, ball_land_y)
@@ -53,7 +53,7 @@ INPUT_SUPPLEMENTARY = 'data/supplementary_data.csv'
 INPUT_SUMER_COVERAGE_PLAYER = 'data/sumer_bdb/sumer_coverages_player_play.parquet'
 INPUT_SUMER_COVERAGE_FRAME = 'data/sumer_bdb/sumer_coverages_frame.parquet'
 OUTPUT_DIR = 'outputs/dataframe_a'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v2.parquet')
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v1.parquet')
 
 # Memory optimization settings
 CHUNK_SIZE = 500000  # Process 500k rows at a time

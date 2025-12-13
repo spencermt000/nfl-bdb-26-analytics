@@ -35,7 +35,7 @@ INPUT_BDB_SUPP = 'data/supplementary_data.csv'
 INPUT_NFLFASTR = 'data/sdv_raw_pbp.parquet'
 INPUT_DF_A = 'outputs/dataframe_a/v2.parquet'
 OUTPUT_DIR = 'outputs/dataframe_b'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v4.parquet')
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v1.parquet')
 
 # Toggle for nflfastR merge
 SDV_MERGE = True 

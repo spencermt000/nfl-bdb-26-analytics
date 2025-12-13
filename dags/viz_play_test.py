@@ -216,6 +216,10 @@ play_frames.sort()
 
 print(f"Visualizing {len(play_frames)} frames...")
 
+# Get ball ending position from the play data
+ball_end_x = selected_play.get('ball_end_x', None)
+ball_end_y = selected_play.get('ball_end_y', None)
+
 # ============================================================================
 # 4. Visualization Loop
 # ============================================================================
@@ -280,16 +284,27 @@ def update(frame_idx):
             comp_prob, attn_weights = comp_model(node_feat, edge_index, edge_feat, ball_progress)
             yac_pred = yac_model(node_feat, edge_index, edge_feat, ball_progress)
         
-        # Draw Edges
+        # Draw Edges - Only for Targeted Receiver
+        # Find the targeted receiver node index
+        targeted_receiver_idx = None
+        if 'player_role' in nodes.columns:
+            targeted_mask = nodes['player_role'] == 'Targeted Receiver'
+            if targeted_mask.any():
+                targeted_receiver_idx = nodes[targeted_mask].index[0]
+                # Get position in the node list (not DataFrame index)
+                targeted_receiver_pos = list(nodes.index).index(targeted_receiver_idx)
+
         attn_avg = attn_weights.mean(dim=1).numpy()
         for i, (src, dst) in enumerate(edge_index.t().numpy()):
             score = attn_avg[i]
-            if score > 0.10: # Only draw strong connections
-                p1 = nodes.iloc[src]
-                p2 = nodes.iloc[dst]
-                alpha = min(score * 3, 1.0)
-                ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']], 
-                       color='blue', alpha=alpha, linewidth=1.5, zorder=1)
+            # Only draw edges connected to the targeted receiver
+            if score > 0.10 and targeted_receiver_pos is not None:
+                if src == targeted_receiver_pos or dst == targeted_receiver_pos:
+                    p1 = nodes.iloc[src]
+                    p2 = nodes.iloc[dst]
+                    alpha = min(score * 3, 1.0)
+                    ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']],
+                           color='blue', alpha=alpha, linewidth=1.5, zorder=1)
 
         # Info Box
         info_text = (
@@ -300,43 +315,45 @@ def update(frame_idx):
     else:
         info_text = "No edges (Pre-snap?)"
 
-    # 5. Plot Nodes
-    # 5. Plot Nodes
+    # 5. Plot Nodes - Color by Role, Label by NFL ID
     # ------------------------------------------------------------------
-    # ROBUST COLUMN CHECK: 'team' vs 'club'
-    team_col = 'team' if 'team' in nodes.columns else 'club'
-    
-    if team_col in nodes.columns:
-        # Map colors based on the found column
-        colors = nodes[team_col].map({
-            'home': 'red', 
-            'away': 'blue', 
-            'football': 'brown',
-            'LA': 'blue', # Example team abbr
-            'BUF': 'red'  # Example team abbr
-        }).fillna('grey')
-        
-        # Fallback: if mapping failed (grey), try checking if it's the football
-        # often 'club' column has 'football' as value
-        if 'displayName' in nodes.columns:
-             mask_football = nodes['displayName'] == 'football'
-             colors[mask_football] = 'brown'
-    else:
-        # If neither column exists, default to black
-        colors = 'black'
+    # Role color mapping (actual values in player_role column)
+    role_colors = {
+        'Passer': '#FF6B6B',                  # Red
+        'Targeted Receiver': '#00FF00',       # Bright Green
+        'Other Route Runner': '#FFE66D',      # Yellow
+        'Defensive Coverage': '#87CEEB',      # Sky Blue
+    }
 
-    ax.scatter(nodes['x'], nodes['y'], c=colors, s=100, zorder=2, edgecolors='white')
-    
-    # Label Nodes
-    for _, row in nodes.iterrows():
-        if pd.notna(row['nfl_id']):
-             ax.text(row['x'], row['y']+1, str(int(row['nfl_id']))[-2:], 
-                   fontsize=6, ha='center', fontweight='bold')
+    # Map colors based on player_role
+    if 'player_role' in nodes.columns:
+        # FIX: Convert to object (string) type immediately to avoid Categorical errors
+        colors = nodes['player_role'].map(role_colors).astype(object).fillna('grey')
+        
+        # Handle football
+        if 'displayName' in nodes.columns:
+            mask_football = nodes['displayName'] == 'football'
+            # Ensure we can write to this location
+            colors.loc[mask_football] = 'brown'
+    else:
+        colors = 'grey'
+
+    # Plot with bigger markers
+    ax.scatter(nodes['x'], nodes['y'], c=colors, s=250, zorder=2, edgecolors='white', linewidths=2)
+
+    # 6. Draw ball ending spot as red square
+    if ball_end_x is not None and ball_end_y is not None and pd.notna(ball_end_x) and pd.notna(ball_end_y):
+        ax.scatter([ball_end_x], [ball_end_y], 
+                  marker='s', s=400, c='red', edgecolors='darkred', 
+                  linewidths=3, zorder=3, alpha=0.7, label='Ball End')
+        ax.text(ball_end_x, ball_end_y-2, 'BALL END', 
+               fontsize=8, ha='center', fontweight='bold', 
+               color='darkred', bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.9))
 
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes, 
            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
     
-    ax.set_title(f"Play {PLAY_ID} | {description[:50]}...")
+    ax.set_title(f"Play {PLAY_ID} | Game {GAME_ID}")
 
 ani = animation.FuncAnimation(fig, update, frames=len(play_frames), interval=200)
 

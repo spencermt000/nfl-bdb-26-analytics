@@ -72,7 +72,7 @@ PILOT_MODE = True  # Set to True to process only N games for testing
 PILOT_N_GAMES = 3
 
 # *** DIAGNOSTICS MODE ***
-GENERATE_DIAGNOSTICS = True  # Set to True to generate diagnostic outputs
+GENERATE_DIAGNOSTICS = False  # Set to True to generate diagnostic outputs
 
 # === EDGE CREATION PARAMETERS ===
 MAX_DIST_EARLY = 15.0       # Max distance (yards) early in ball flight

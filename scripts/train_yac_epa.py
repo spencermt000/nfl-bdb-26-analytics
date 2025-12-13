@@ -44,12 +44,12 @@ print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 # *** PILOT MODE ***
 PILOT_MODE = True  # Set to False for full dataset
-PILOT_DF_C = 'outputs/dataframe_c/v3_pilot_3games.parquet'
-REGULAR_DF_C = 'outputs/dataframe_c/v3.parquet'
+PILOT_DF_C = 'outputs/dataframe_c/v1_pilot_3games.parquet'
+REGULAR_DF_C = 'outputs/dataframe_c/v1.parquet'
 
 # File paths
-INPUT_DF_A = 'outputs/dataframe_a/v2.parquet'
-INPUT_DF_B = 'outputs/dataframe_b/v4.parquet' # Ensure this version has comp_yac_epa
+INPUT_DF_A = 'outputs/dataframe_a/v1.parquet'
+INPUT_DF_B = 'outputs/dataframe_b/v1.parquet' # Ensure this version has comp_yac_epa
 INPUT_DF_C = PILOT_DF_C if PILOT_MODE else REGULAR_DF_C
 
 # Output directory for YAC model

@@ -471,7 +471,7 @@ class EPADistributionModel(nn.Module):
         
         # Ensure σ > 0 using softplus: σ = log(1 + exp(raw_σ))
         # Add small constant for numerical stability
-        sigma = F.softplus(raw_sigma) + 1e-6  # [1]
+        sigma = F.softplus(raw_sigma) + 0.08  # [1]
         
         return mu, sigma
 

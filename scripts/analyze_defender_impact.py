@@ -403,7 +403,7 @@ def attribute_to_defenders(play_results):
         node_id_to_idx = {nid: i for i, nid in enumerate(node_ids)}
         
         # For each edge, add attention to both players
-        for edge_idx, (_, edge_row) in enumerate(edge_df.iterrows():
+        for edge_idx, (_, edge_row) in enumerate(edge_df.iterrows()):
             playerA_id = edge_row['playerA_id']
             playerB_id = edge_row['playerB_id']
             

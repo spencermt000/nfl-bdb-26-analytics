@@ -67,12 +67,10 @@ OUTPUT_DIR = 'outputs/dataframe_c'
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'v2.parquet')
 DIAGNOSTICS_DIR = os.path.join(OUTPUT_DIR, 'v2_diagnostics')
 
-# *** PILOT MODE ***
-PILOT_MODE = True  # Set to True to process only N games for testing
-PILOT_N_GAMES = 3
-
-# *** DIAGNOSTICS MODE ***
-GENERATE_DIAGNOSTICS = False  # Set to True to generate diagnostic outputs
+PILOT_MODE = os.getenv('NFL_PILOT_MODE', 'true').lower() == 'true'
+PILOT_N_GAMES = int(os.getenv('NFL_PILOT_N_GAMES', '3'))
+GENERATE_DIAGNOSTICS = os.getenv('NFL_GENERATE_DIAGNOSTICS', 'false').lower() == 'true'
+DATA_VERSION = os.getenv('NFL_DATA_VERSION', 'v1')
 
 # === EDGE CREATION PARAMETERS ===
 MAX_DIST_EARLY = 15.0       # Max distance (yards) early in ball flight

@@ -51,7 +51,7 @@ print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 MODEL_PATH = 'model_outputs/epa_distribution/model.pth'
 INPUT_DF_A = 'outputs/dataframe_a/v1.parquet'
 INPUT_DF_B = 'outputs/dataframe_b/v1.parquet'
-INPUT_DF_C = 'outputs/dataframe_c/v2_pilot_3games.parquet'
+INPUT_DF_C = 'outputs/dataframe_c/v2_pilot_36games.parquet'
 
 # Output directory
 OUTPUT_DIR = 'model_outputs/defender_impact_analysis'

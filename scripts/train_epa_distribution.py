@@ -61,7 +61,13 @@ print("=" * 80)
 print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 # *** PILOT MODE ***
-PILOT_MODE = True  # Set to False for full dataset
+PILOT_MODE = os.getenv('NFL_PILOT_MODE', 'true').lower() == 'true'
+PILOT_N_GAMES = int(os.getenv('NFL_PILOT_N_GAMES', '3'))
+MAX_TRAIN_TIME_MINUTES = int(os.getenv('NFL_TRAIN_TIME_MINUTES', '10'))
+LEARNING_RATE = float(os.getenv('NFL_LEARNING_RATE', '0.001'))
+N_ATTENTION_HEADS = int(os.getenv('NFL_ATTENTION_HEADS', '4'))
+HIDDEN_DIM = int(os.getenv('NFL_HIDDEN_DIM', '128'))
+PRINT_EVERY = int(os.getenv('NFL_PRINT_EVERY', '500'))
 PILOT_DF_C = 'outputs/dataframe_c/v2_pilot_3games.parquet'
 REGULAR_DF_C = 'outputs/dataframe_c/v2.parquet'
 

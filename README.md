@@ -18,9 +18,15 @@
 
 
 # DOCKER
-- copy scripts: docker cp scripts/train_epa_distribution.py nfl-bdb-airflow-airflow-scheduler-1:/opt/airflow/project/scripts/
-- run it: docker exec nfl-bdb-airflow-airflow-scheduler-1 \
+copy scripts:
+- docker cp scripts/train_epa_distribution.py nfl-bdb-airflow-airflow-scheduler-1:/opt/airflow/project/scripts/
+- docker cp scripts/dataframe_c_v2.py nfl-bdb-airflow-airflow-scheduler-1:/opt/airflow/project/scripts/
+run it: 
+
+docker exec nfl-bdb-airflow-airflow-scheduler-1 \
   python /opt/airflow/project/scripts/dataframe_c_v2.py
+
+
 
 # STEP 1: PREPROCESS
 ## Dataframe A: Node-Level

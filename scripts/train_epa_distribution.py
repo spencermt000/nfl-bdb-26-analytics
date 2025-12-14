@@ -412,6 +412,9 @@ class MultiHeadGraphAttention(nn.Module):
             if mask.any():
                 attn_weights[mask] = F.softmax(scores[mask], dim=0)
         
+        # Store attention weights for later extraction
+        self.last_attention_weights = attn_weights
+        
         # Aggregate: sum weighted values
         weighted_V = V[src] * attn_weights.unsqueeze(-1)  # [E, heads, head_dim]
         out = torch.zeros(N, self.n_heads, self.head_dim, device=node_feat.device)
@@ -446,16 +449,18 @@ class EPADistributionModel(nn.Module):
             nn.Linear(32, 2)  # Output: [μ, raw_σ]
         )
         
-    def forward(self, node_feat, edge_index, edge_feat):
+    def forward(self, node_feat, edge_index, edge_feat, return_attention=False):
         """
         Args:
             node_feat: [N, node_in_dim]
             edge_index: [2, E]
             edge_feat: [E, edge_in_dim]
+            return_attention: If True, return attention weights along with mu, sigma
         
         Returns:
             mu: [1] (mean EPA)
             sigma: [1] (std deviation, constrained > 0)
+            attention: [E, n_heads] (optional, only if return_attention=True)
         """
         # Graph attention
         h = self.gat(node_feat, edge_index, edge_feat)  # [N, hidden_dim]
@@ -472,6 +477,11 @@ class EPADistributionModel(nn.Module):
         # Ensure σ > 0 using softplus: σ = log(1 + exp(raw_σ))
         # Add small constant for numerical stability
         sigma = F.softplus(raw_sigma) + 0.08  # [1]
+        
+        if return_attention:
+            # Get attention weights from GAT layer
+            attention = self.gat.last_attention_weights if hasattr(self.gat, 'last_attention_weights') else None
+            return mu, sigma, attention
         
         return mu, sigma
 
